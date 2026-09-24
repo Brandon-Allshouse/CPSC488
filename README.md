@@ -238,6 +238,79 @@ Common native-setup problems:
   `[Environment]::SetEnvironmentVariable('JAVA_HOME', (Split-Path (Split-Path (Get-Command java).Source)), 'User')`,
   then reopen PowerShell.
 
+## Contributing
+
+Nobody commits directly to `main`. Every change goes on its own short-lived branch, made from an
+up-to-date `main`, and gets merged back through a pull request.
+
+### 1. Pull before you start
+
+Always start from the latest `main`, so you're building on everyone else's work and not an old
+copy of it:
+
+```powershell
+git switch main
+git pull
+docker compose up --build
+```
+
+Rebuilding after a pull picks up any new database migrations and dependency changes.
+
+### 2. Make a branch for your change
+
+Create one branch per feature or fix, named after what it does:
+
+```powershell
+git switch -c feature/interest-selection
+```
+
+Start the name with `feature/` for new functionality or `fix/` for bug fixes, followed by a few
+words separated by hyphens (`feature/video-feed`, `fix/login-error-message`). Keep each branch
+focused on one thing. Small branches are easier to review and cause fewer merge conflicts.
+
+### 3. Commit and push
+
+```powershell
+git add <files>
+git commit -m "Add interest selection page"
+git push -u origin feature/interest-selection
+```
+
+Never commit `.env`. It's gitignored, but check `git status` before committing anyway.
+
+### 4. Keep your branch up to date
+
+If `main` changes while you're working, bring those changes into your branch before opening a pull
+request, and again if it falls behind while waiting for review:
+
+```powershell
+git switch main
+git pull
+git switch feature/interest-selection
+git merge main
+```
+
+If Git reports merge conflicts, fix the marked sections in each file, then `git add` them and
+`git commit`. Ask the teammate who wrote the other change if you're unsure which version to keep.
+
+### 5. Open a pull request
+
+Open a pull request into `main` on GitHub. Before merging:
+
+- CI must pass (tests, build, vulnerability checks and CodeQL).
+- A teammate should review it. If it touches accounts, sessions, user input or the database, check
+  it against [SECURITY.md](SECURITY.md).
+
+After it's merged, delete the branch on GitHub, and locally:
+
+```powershell
+git switch main
+git pull
+git branch -d feature/interest-selection
+```
+
+Then start your next change from step 1.
+
 ## Configuration
 
 Settings are read from `.env` in the repo root, and real environment variables override it.
