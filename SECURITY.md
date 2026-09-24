@@ -1,23 +1,23 @@
 # Security
 
-This document is the project's security requirements baseline (NIST SSDF PO.1). Every feature is
-expected to meet it, and every PR that touches authentication, sessions, user input or the database
-should be checked against it.
+BrainFeed is a class project, but we build it to real-world security standards. This file lists
+those standards, shows where the code meets each requirement, and notes what isn't covered yet.
+If your change touches accounts, sessions, user input or the database, check it against this file
+before opening a PR.
 
-Standards we follow:
+## Standards
 
-- **NIST SP 800-63B** (Digital Identity Guidelines: Authentication), rev. 4, at AAL1
-- **NIST SP 800-218** Secure Software Development Framework (SSDF)
-- **OWASP ASVS 4.0** (Application Security Verification Standard), targeting Level 1 with selected Level 2 controls
-- **OWASP Top 10 (2021)** and the OWASP Cheat Sheet Series
+- **NIST SP 800-63B** (Digital Identity Guidelines: Authentication), rev. 4, at AAL1. Password,
+  login and session rules.
+- **NIST SP 800-218**, the Secure Software Development Framework (SSDF). How we write, test and
+  maintain the code.
+- **OWASP ASVS 4.0** (Application Security Verification Standard), Level 1 plus some Level 2
+  controls. A checklist of what a secure web app should do.
+- **OWASP Top 10 (2021)** and the **OWASP Cheat Sheet Series**. The most common web app
+  vulnerabilities, and practical guidance for avoiding them.
 
-This is a class project and has not been independently audited or certified. "Aligned with" below
-means we implemented the listed control, not that a third party verified it.
-
-## Reporting a vulnerability
-
-Please don't open a public issue. Contact the team privately (see the README for names) with the
-steps to reproduce. We'll acknowledge within a few days, fix it, and credit you if you want.
+Nobody outside the team has audited the project. The tables below show what we implemented, not
+what a third party has verified.
 
 ## Architecture and trust boundaries
 
@@ -91,14 +91,32 @@ and control characters are stripped so user input can't forge log lines.
 |---|---|
 | PO.1 Define security requirements | This document |
 | PS.1 Protect code and secrets | `.env` is gitignored; secrets come only from the environment |
-| PW.4 Reuse well-secured components | Maintained libraries only (Javalin, BouncyCastle, Flyway, HikariCP, pgJDBC) with pinned versions |
+| PW.4 Reuse well-secured components | Maintained libraries only (Javalin, BouncyCastle, Flyway, HikariCP, pgJDBC) with pinned versions, on long-term support (LTS) releases of Java and Node |
 | PW.7 Review code | Security-relevant PRs are reviewed against this document; CodeQL runs on every PR |
 | PW.8 Test | Unit tests for hashing, password policy, rate limiting and log sanitizing; run in CI |
-| RV.1 Find vulnerabilities | Dependabot, `npm audit`, and OWASP Dependency-Check (`mvn verify -P security-scan`) |
+| RV.1 Find vulnerabilities | Weekly Dependabot PRs (see "Dependency updates" in the README), `npm audit` in CI, and OWASP Dependency-Check run by hand (`mvn verify -P security-scan`) |
+
+## Checklist for new features
+
+The features on the roadmap (video feed, interests, YouTube and LLM APIs) bring new risks. Most of
+the protections above apply automatically, but a few are up to you:
+
+- **New endpoints** get the security headers and CSRF checks automatically (the `before` handler
+  in `App.java`). If an endpoint needs a logged-in user, call `AuthController.currentUser` and
+  return 401 when it's empty. For anything that belongs to a user (interests, history, likes),
+  also check that it belongs to *that* user, not just that someone is logged in.
+- **New tables:** use `?` placeholders for every value, validate input in the backend, and add
+  `CHECK` constraints in the migration as a backstop.
+- **API keys** (YouTube, LLM) go in `.env` and `.env.example`, never in code. Only the backend
+  calls those APIs, so keys never reach the browser.
+- **Anything from YouTube or an LLM is untrusted input**, just like user input. Show it as plain
+  text through React. Never use it as HTML or put it in SQL without placeholders.
+- **YouTube embeds** need the Content-Security-Policy in `frontend/vite.config.ts` to allow
+  YouTube's domains. Add only the specific domains you need, not wildcards like `https:`.
 
 ## Known gaps and accepted risks
 
-These are tracked here openly rather than hidden:
+Things we know aren't covered yet, and what would need to change:
 
 1. **Single factor only (AAL1).** There's no MFA. That's acceptable for this app's data; add TOTP or passkeys if sensitive data is added.
 2. **No email verification or password reset yet.** Until verification exists, sign-up says when an email is already registered (sign-ups are rate limited to reduce enumeration). Password reset must follow the OWASP Forgot Password Cheat Sheet when built.
