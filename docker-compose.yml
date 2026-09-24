@@ -78,7 +78,7 @@ services:
   # Runs the backend unit tests: `docker compose run --rm backend-tests`
   # The "test" profile means it doesn't start with `docker compose up`.
   backend-tests:
-    image: maven:3.9.15-eclipse-temurin-25
+    image: maven:3.9.15-eclipse-temurin-26
     profiles: ["test"]
     working_dir: /app
     command: mvn -B test
