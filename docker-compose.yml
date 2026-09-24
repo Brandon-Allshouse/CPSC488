@@ -1,0 +1,90 @@
+# Runs the whole app (database, backend, frontend) with one command, from the repo root:
+#
+#   docker compose up --build
+#
+# The only things you need installed are Docker Desktop and Git. Java, Maven and Node all run
+# inside containers at the versions pinned below and in backend/Dockerfile. See the README.
+
+name: brainfeed
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: brainfeed
+      POSTGRES_USER: ${DB_USER:-brainfeed}
+      # Read from .env in the repo root. There is deliberately no default password.
+      # NOTE: Postgres only uses this the FIRST time the database is created. If you change
+      # DB_PASSWORD later, reset the database with `docker compose down -v` (this deletes all
+      # local data) and start it again.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env - copy .env.example to .env}
+      # Use SCRAM-SHA-256 for database logins instead of the older md5 method.
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports:
+      # Bound to 127.0.0.1 so only this machine can reach it: the backend, and database tools
+      # like IntelliJ's if you want to inspect tables. Never exposed to the network, and the
+      # browser/frontend never connects to it.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Data survives restarts and `docker compose down`; only `down -v` erases it.
+      - brainfeed-data:/var/lib/postgresql/data
+    healthcheck:
+      # Lets the backend wait until Postgres is actually accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d brainfeed"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build: ./backend
+    # All settings and secrets come from .env (see .env.example)...
+    env_file: .env
+    environment:
+      # ...except the database address: inside Docker, the database is reached by its service
+      # name "db", not "localhost".
+      DB_URL: jdbc:postgresql://db:5432/brainfeed
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Only needed to call the API directly (e.g. curl); the frontend reaches it inside Docker.
+      - "127.0.0.1:7070:7070"
+
+  frontend:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    # Installs packages (a quick no-op when nothing changed) and starts the Vite dev server.
+    # --host makes it reachable from outside the container.
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0"
+    environment:
+      # Where Vite forwards /api requests (see vite.config.ts).
+      API_PROXY_TARGET: http://backend:7070
+      # File-change events from Windows don't reach containers, so Vite has to poll for edits.
+      VITE_USE_POLLING: "true"
+    volumes:
+      # Your source code, live: edits show up in the browser without restarting anything.
+      - ./frontend:/app
+      # node_modules lives inside Docker, not in your folder. Some packages (esbuild, rollup)
+      # contain OS-specific binaries, so Windows and Linux can't share one node_modules.
+      - frontend-node-modules:/app/node_modules
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - backend
+
+  # Runs the backend unit tests: `docker compose run --rm backend-tests`
+  # The "test" profile means it doesn't start with `docker compose up`.
+  backend-tests:
+    image: maven:3.9.9-eclipse-temurin-21
+    profiles: ["test"]
+    working_dir: /app
+    command: mvn -B test
+    volumes:
+      - ./backend:/app
+      # Keeps downloaded libraries between runs so tests start fast after the first time.
+      - maven-cache:/root/.m2
+
+volumes:
+  brainfeed-data:
+  frontend-node-modules:
+  maven-cache:

@@ -1,0 +1,9 @@
+# Store and check out text files with Unix (LF) line endings on every OS, so files mounted into
+# Linux containers behave the same no matter whose laptop they came from. Modern Windows editors
+# (VS Code, IntelliJ, Notepad) all handle LF fine.
+* text=auto eol=lf
+
+# Windows-only scripts must keep Windows line endings.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

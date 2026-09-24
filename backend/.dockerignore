@@ -1,0 +1,4 @@
+# Keep build output and IDE files out of the Docker build (faster, and avoids stale classes).
+target/
+.idea/
+*.iml
