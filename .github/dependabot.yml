@@ -3,6 +3,13 @@
 # Updates are grouped into one PR per ecosystem, because related packages often only work when
 # bumped together (e.g. vite + @vitejs/plugin-react, react + react-dom + their @types). One PR per
 # package would each fail CI on its own.
+#
+# Runtime versions (Java, Node, Postgres) are upgraded by hand, one long-term-support (LTS) release
+# to the next, because each one is set in several places that must match: pom.xml, Dockerfile,
+# docker-compose.yml, ci.yml and the README. Dependabot would otherwise offer every new major
+# version, including short-lived non-LTS ones (Java 26, Node 25), and only in some of those files.
+# The image tags used (25-jre, 24-trixie-slim, 18) still receive security patches: they point to
+# the latest patch release, so a rebuild (`docker compose up --build`, and every CI run) picks them up.
 version: 2
 updates:
   - package-ecosystem: maven
@@ -12,6 +19,7 @@ updates:
     groups:
       maven:
         patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /frontend
     schedule:
@@ -20,10 +28,11 @@ updates:
       npm:
         patterns: ["*"]
     ignore:
-      # @types/node must match the Node major we run (docker-compose.yml and ci.yml), not the
-      # newest Node. Bump it by hand when moving to a new Node LTS.
+      # @types/node must match the Node major we run, not the newest Node. Bump it together with
+      # the Node image when moving to a new Node LTS.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+
   - package-ecosystem: docker
     directory: /backend
     schedule:
@@ -31,6 +40,14 @@ updates:
     groups:
       docker:
         patterns: ["*"]
+    ignore:
+      # Java runtime: stay on the current LTS until upgraded by hand.
+      - dependency-name: "eclipse-temurin"
+        update-types: ["version-update:semver-major"]
+      # Build-only image, not shipped. Its tag ends in the Java version (3.9.15-eclipse-temurin-25),
+      # which Dependabot bumps to non-LTS Java releases. Update it by hand with the Java version.
+      - dependency-name: "maven"
+
   - package-ecosystem: docker-compose
     directory: /
     schedule:
@@ -38,6 +55,17 @@ updates:
     groups:
       docker-compose:
         patterns: ["*"]
+    ignore:
+      # Node: stay on the current LTS until upgraded by hand (odd-numbered releases are never LTS).
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      # A new Postgres major version can't read the old data files; it needs a new volume name
+      # in docker-compose.yml (see the comment there), so it's always a deliberate upgrade.
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+      # Test-only image; same reason as in the docker section above.
+      - dependency-name: "maven"
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
