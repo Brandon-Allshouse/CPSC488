@@ -118,9 +118,13 @@ the protections above apply automatically, but a few are up to you:
 
 Things we know aren't covered yet, and what would need to change:
 
-1. **Single factor only (AAL1).** There's no MFA. That's acceptable for this app's data; add TOTP or passkeys if sensitive data is added.
-2. **No email verification or password reset yet.** Until verification exists, sign-up says when an email is already registered (sign-ups are rate limited to reduce enumeration). Password reset must follow the OWASP Forgot Password Cheat Sheet when built.
-3. **Rate limits are in memory.** They reset on restart and aren't shared across multiple backend instances. Move them to the DB or Redis before scaling out. Behind the Vite dev proxy, all clients share one IP.
-4. **The breached-password check fails open** if Have I Been Pwned is unreachable, so an outage doesn't block sign-ups. The other policy rules still apply.
-5. **HTTPS is a deployment requirement.** Deploy behind TLS 1.2+, set `COOKIE_SECURE=true`, and send the CSP and `frame-ancestors` as HTTP headers from the web server.
-6. **The pepper can't be rotated** without users resetting their passwords. Store it in a secrets manager in production.
+1. **Passwords are the only login factor for now (NIST AAL1).** NIST allows this when a stolen account can't do much harm, which is true of interests and liked videos. MFA with an authenticator app (TOTP, such as Google Authenticator) is planned, which would bring us to AAL2. When building it: encrypt each user's TOTP secret with a key kept in `.env`, rate-limit code attempts, accept one code of clock drift either side but never the same code twice, and only ask for the code after the password is correct. Once it's in place, update the Authentication table and the AAL level at the top of this file.
+2. **Emails are never verified, and there's no password reset.** We're not sending email, because that would mean buying a domain. As a result:
+   - Anyone can sign up with an email address they don't own. Never treat an account's email as proof of who someone is.
+   - A user who forgets their password loses the account. The team can only help by editing the database directly. Don't add a reset flow that works without proving the user owns the account (for example, security questions, which NIST forbids). When MFA is added, give each user about 10 one-time recovery codes at setup (stored hashed, like passwords). Those will be the recovery path for a lost phone, since there's no email to fall back on.
+   - Sign-up says when an email is already registered, so someone could use it to check whether an address has an account. The sign-up rate limit makes this slow to do in bulk.
+3. **No CAPTCHA yet, so bots can create accounts.** The only protection is the rate limit of 20 sign-ups per hour per IP, and someone with many IPs can get around it. A CAPTCHA on sign-up is planned. The CAPTCHA provider's secret key goes in `.env`, the backend must check every token with the provider (never trust the browser's answer), and the Content-Security-Policy will need the provider's domains.
+4. **Rate limits are in memory.** They reset on restart and aren't shared across multiple backend instances. Move them to the DB or Redis before scaling out. Behind the Vite dev proxy, all clients share one IP.
+5. **The breached-password check fails open** if Have I Been Pwned is unreachable, so an outage doesn't block sign-ups. The other policy rules still apply.
+6. **HTTPS is a deployment requirement.** Deploy behind TLS 1.2+, set `COOKIE_SECURE=true`, and send the CSP and `frame-ancestors` as HTTP headers from the web server.
+7. **The pepper can't be rotated.** Changing it would stop every existing password from working, and without a password reset those accounts would be lost. Store it in a secrets manager in production.
