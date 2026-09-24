@@ -2,7 +2,7 @@
 # Tool versions are pinned here so every machine builds with the same Maven and Java.
 
 # ---- Build stage: compile with Maven ----
-FROM maven:3.9.15-eclipse-temurin-25 AS build
+FROM maven:3.9.15-eclipse-temurin-26 AS build
 WORKDIR /app
 
 # Download dependencies first, in their own layer. Docker reuses this layer until pom.xml
