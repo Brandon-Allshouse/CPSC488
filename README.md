@@ -26,9 +26,9 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 
 ## Stack (subject to change)
 
-- **Backend:** Java 21, using Javalin 6, built with Maven
-- **Frontend:** React + TypeScript, built with Vite
-- **Database:** PostgreSQL 16. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
+- **Backend:** Java 25, using Javalin 7, built with Maven
+- **Frontend:** React 19 + TypeScript, built with Vite (Node 24)
+- **Database:** PostgreSQL 18. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
 - **Local development:** Docker Compose runs all of the above, so the only tools you need are Docker Desktop and Git
 - **External services:** YouTube Data API, plus an LLM API for content classification (and later, generation)
 
@@ -168,6 +168,7 @@ and CodeQL on every push and pull request.
 | `env file ...\.env not found` or `Set DB_PASSWORD in .env` | `.env` is missing or misnamed. It must be in the `CPSC488` folder and named exactly `.env`. Check with `Get-ChildItem -Force .env`; Notepad sometimes saves it as `.env.txt`. |
 | Backend: `DB_PASSWORD is not set` or `PASSWORD_PEPPER ...` | That value in `.env` is blank or invalid. Generate one as in step 1. |
 | Backend: `password authentication failed for user "..."` | `DB_PASSWORD` changed after the database was created. Reset the local database: `docker compose down -v`, then `docker compose up --build`. This erases local data. |
+| Database starts empty after pulling the PostgreSQL 18 upgrade | Expected: Postgres can't read data files from an older major version, so the database moved to a new volume and starts fresh. Sign up again. To free the old volume's disk space: `docker volume rm brainfeed_brainfeed-data`. |
 | Backend: Flyway `Validate failed: Migration checksum mismatch` | A migration file changed after it ran on your database. Reset with `docker compose down -v`. Never edit a migration others have run; add a new one. |
 | `port is already allocated` (5432, 7070 or 5173) | Something else is using that port. For 5432 it's usually a separately installed PostgreSQL: stop it in the Services app (`postgresql-x64-…`). For 7070/5173, close any backend or `npm run dev` you started outside Docker. |
 | Login page shows `Request failed (500)`, and frontend logs show `ECONNREFUSED` | The backend isn't running or crashed. Look for the error in the `backend-1` lines, or run `docker compose logs backend`. |
@@ -184,10 +185,10 @@ is only worth it if you want breakpoints in IntelliJ or VS Code. The database st
    `C:\Users\<you>\tools` and adds it to your PATH. Afterwards, close and reopen PowerShell.
 
    ```powershell
-   winget install -e --id EclipseAdoptium.Temurin.21.JDK
+   winget install -e --id EclipseAdoptium.Temurin.25.JDK
    winget install -e --id OpenJS.NodeJS.LTS
 
-   $v = '3.9.9'; $dest = "$env:USERPROFILE\tools"
+   $v = '3.9.15'; $dest = "$env:USERPROFILE\tools"
    New-Item -ItemType Directory -Force $dest | Out-Null
    $ProgressPreference = 'SilentlyContinue'
    Invoke-WebRequest "https://archive.apache.org/dist/maven/maven-3/$v/binaries/apache-maven-$v-bin.zip" -OutFile "$dest\maven.zip" -UseBasicParsing

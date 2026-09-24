@@ -1,7 +1,7 @@
 package edu.cpsc488.brainfeed.auth;
 
 import edu.cpsc488.brainfeed.ApiException;
-import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
 import java.time.Duration;
@@ -69,11 +69,11 @@ public class AuthController {
         this.dummyHash = hasher.hash("dummy password used only for timing equalization");
     }
 
-    public void register(Javalin app) {
-        app.post("/api/auth/register", this::handleRegister);
-        app.post("/api/auth/login", this::handleLogin);
-        app.post("/api/auth/logout", this::handleLogout);
-        app.get("/api/auth/me", this::handleMe);
+    public void register(RoutesConfig routes) {
+        routes.post("/api/auth/register", this::handleRegister);
+        routes.post("/api/auth/login", this::handleLogin);
+        routes.post("/api/auth/logout", this::handleLogout);
+        routes.get("/api/auth/me", this::handleMe);
     }
 
     private void handleRegister(Context ctx) {

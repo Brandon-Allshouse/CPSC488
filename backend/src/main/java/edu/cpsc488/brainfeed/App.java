@@ -30,8 +30,9 @@ import java.util.stream.Collectors;
  * Backend entry point. Reads settings, connects to Postgres (applying any pending migrations),
  * wires up the controllers, and starts the Javalin HTTP server.
  *
- * <p>To add a new feature: create a controller with a {@code register(Javalin app)} method (see
- * {@link AuthController}), construct it here, and call {@code register}. Use
+ * <p>To add a new feature: create a controller with a {@code register(RoutesConfig routes)} method
+ * (see {@link AuthController}), construct it here, and call {@code register} inside
+ * {@code Javalin.create}. Use
  * {@link AuthController#currentUser} to find out who is making a request.
  */
 public class App {
@@ -88,29 +89,29 @@ public class App {
             // hundred bytes, so 16 KB rejects oversized junk early. Raise it only if a new
             // endpoint (e.g. file upload) genuinely needs more.
             config.http.maxRequestSize = 16_384L;
-            config.showJavalinBanner = false;
+            config.startup.showJavalinBanner = false;
             // Don't advertise the server software and version to attackers.
             config.jetty.modifyHttpConfiguration(http -> http.setSendServerVersion(false));
-        });
 
-        // Runs before every route, so new endpoints get these protections automatically.
-        app.before(ctx -> {
-            setSecurityHeaders(ctx, secureCookies);
-            rejectCrossSiteWrites(ctx, allowedOrigins);
-        });
+            // Runs before every route, so new endpoints get these protections automatically.
+            config.routes.before(ctx -> {
+                setSecurityHeaders(ctx, secureCookies);
+                rejectCrossSiteWrites(ctx, allowedOrigins);
+            });
 
-        // Expected errors (bad input, not logged in, ...) become {"error": "..."} with their status.
-        app.exception(ApiException.class, (e, ctx) ->
-                ctx.status(e.status()).json(Map.of("error", e.getMessage())));
-        // Anything else is a bug. Log the details here, but only send the client a generic message,
-        // since stack traces and SQL errors reveal internals an attacker could use.
-        app.exception(Exception.class, (e, ctx) -> {
-            log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
-            ctx.status(500).json(Map.of("error", "Something went wrong on our end."));
-        });
+            // Expected errors (bad input, not logged in, ...) become {"error": "..."} with their status.
+            config.routes.exception(ApiException.class, (e, ctx) ->
+                    ctx.status(e.status()).json(Map.of("error", e.getMessage())));
+            // Anything else is a bug. Log the details here, but only send the client a generic message,
+            // since stack traces and SQL errors reveal internals an attacker could use.
+            config.routes.exception(Exception.class, (e, ctx) -> {
+                log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
+                ctx.status(500).json(Map.of("error", "Something went wrong on our end."));
+            });
 
-        app.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
-        auth.register(app);
+            config.routes.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
+            auth.register(config.routes);
+        });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             app.stop();

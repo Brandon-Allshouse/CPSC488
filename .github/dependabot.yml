@@ -1,19 +1,47 @@
 # Opens PRs when dependencies have security fixes or new versions (NIST SSDF RV.1, OWASP Top 10 A06).
+#
+# Updates are grouped into one PR per ecosystem, because related packages often only work when
+# bumped together (e.g. vite + @vitejs/plugin-react, react + react-dom + their @types). One PR per
+# package would each fail CI on its own.
 version: 2
 updates:
   - package-ecosystem: maven
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      maven:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
+    ignore:
+      # @types/node must match the Node major we run (docker-compose.yml and ci.yml), not the
+      # newest Node. Bump it by hand when moving to a new Node LTS.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      docker-compose:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

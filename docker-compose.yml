@@ -9,7 +9,7 @@ name: brainfeed
 
 services:
   db:
-    image: postgres:16
+    image: postgres:18
     environment:
       POSTGRES_DB: brainfeed
       POSTGRES_USER: ${DB_USER:-brainfeed}
@@ -27,7 +27,10 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       # Data survives restarts and `docker compose down`; only `down -v` erases it.
-      - brainfeed-data:/var/lib/postgresql/data
+      # Postgres 18+ images keep data under /var/lib/postgresql/<major version>/, so this mounts
+      # the parent folder. A new major version can't read an older one's files: when upgrading,
+      # rename the volume (the old one can be removed with `docker volume rm`).
+      - brainfeed-pgdata:/var/lib/postgresql
     healthcheck:
       # Lets the backend wait until Postgres is actually accepting connections.
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d brainfeed"]
@@ -51,7 +54,7 @@ services:
       - "127.0.0.1:7070:7070"
 
   frontend:
-    image: node:22-bookworm-slim
+    image: node:24-trixie-slim
     working_dir: /app
     # Installs packages (a quick no-op when nothing changed) and starts the Vite dev server.
     # --host makes it reachable from outside the container.
@@ -75,7 +78,7 @@ services:
   # Runs the backend unit tests: `docker compose run --rm backend-tests`
   # The "test" profile means it doesn't start with `docker compose up`.
   backend-tests:
-    image: maven:3.9.9-eclipse-temurin-21
+    image: maven:3.9.15-eclipse-temurin-25
     profiles: ["test"]
     working_dir: /app
     command: mvn -B test
@@ -85,6 +88,6 @@ services:
       - maven-cache:/root/.m2
 
 volumes:
-  brainfeed-data:
+  brainfeed-pgdata:
   frontend-node-modules:
   maven-cache:
