@@ -16,7 +16,7 @@ COPY src ./src
 RUN mvn -B -q compile dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory=target/lib
 
 # ---- Run stage: only the Java runtime and the compiled app, no Maven or source code ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 # Run as an unprivileged user rather than root, so a bug in the app can't take over the container.
 RUN useradd --system --create-home app
 WORKDIR /app
