@@ -54,7 +54,7 @@ services:
       - "127.0.0.1:7070:7070"
 
   frontend:
-    image: node:24-trixie-slim
+    image: node:25-trixie-slim
     working_dir: /app
     # Installs packages (a quick no-op when nothing changed) and starts the Vite dev server.
     # --host makes it reachable from outside the container.
@@ -78,7 +78,7 @@ services:
   # Runs the backend unit tests: `docker compose run --rm backend-tests`
   # The "test" profile means it doesn't start with `docker compose up`.
   backend-tests:
-    image: maven:3.9.15-eclipse-temurin-25
+    image: maven:3.9.15-eclipse-temurin-26
     profiles: ["test"]
     working_dir: /app
     command: mvn -B test
