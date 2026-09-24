@@ -1,15 +1,13 @@
-# Opens PRs when dependencies have security fixes or new versions (NIST SSDF RV.1, OWASP Top 10 A06).
+# Dependabot checks for new library, image and GitHub Actions versions every week and opens PRs
+# for them (NIST SSDF RV.1, OWASP Top 10 A06). See "Dependency updates" in the README.
 #
-# Updates are grouped into one PR per ecosystem, because related packages often only work when
-# bumped together (e.g. vite + @vitejs/plugin-react, react + react-dom + their @types). One PR per
-# package would each fail CI on its own.
+# Each section groups its updates into a single PR. Related packages often only work when they're
+# upgraded together (vite and @vitejs/plugin-react, react and react-dom), so separate PRs would
+# each fail CI on their own.
 #
-# Runtime versions (Java, Node, Postgres) are upgraded by hand, one long-term-support (LTS) release
-# to the next, because each one is set in several places that must match: pom.xml, Dockerfile,
-# docker-compose.yml, ci.yml and the README. Dependabot would otherwise offer every new major
-# version, including short-lived non-LTS ones (Java 26, Node 25), and only in some of those files.
-# The image tags used (25-jre, 24-trixie-slim, 18) still receive security patches: they point to
-# the latest patch release, so a rebuild (`docker compose up --build`, and every CI run) picks them up.
+# Java, Node and Postgres major versions are ignored below on purpose. Each one is set in several
+# files that have to change together, and Dependabot would also suggest short-lived releases like
+# Java 26 or Node 25. Upgrade them by hand, using the checklist in the README.
 version: 2
 updates:
   - package-ecosystem: maven
@@ -28,8 +26,8 @@ updates:
       npm:
         patterns: ["*"]
     ignore:
-      # @types/node must match the Node major we run, not the newest Node. Bump it together with
-      # the Node image when moving to a new Node LTS.
+      # These are the type definitions for Node itself, so they should match the Node version we
+      # run, not the newest one. Bump it when you upgrade Node.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
@@ -41,11 +39,11 @@ updates:
       docker:
         patterns: ["*"]
     ignore:
-      # Java runtime: stay on the current LTS until upgraded by hand.
       - dependency-name: "eclipse-temurin"
         update-types: ["version-update:semver-major"]
-      # Build-only image, not shipped. Its tag ends in the Java version (3.9.15-eclipse-temurin-25),
-      # which Dependabot bumps to non-LTS Java releases. Update it by hand with the Java version.
+      # The Java version is at the end of this tag (3.9.15-eclipse-temurin-25), and Dependabot
+      # treats a change there as an ordinary update. That's how it once tried to move us to
+      # Java 26. It's only used to compile, so we update it by hand along with Java.
       - dependency-name: "maven"
 
   - package-ecosystem: docker-compose
@@ -56,14 +54,13 @@ updates:
       docker-compose:
         patterns: ["*"]
     ignore:
-      # Node: stay on the current LTS until upgraded by hand (odd-numbered releases are never LTS).
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
-      # A new Postgres major version can't read the old data files; it needs a new volume name
-      # in docker-compose.yml (see the comment there), so it's always a deliberate upgrade.
+      # A new Postgres major version also needs a new volume name. See the comment on the db
+      # service in docker-compose.yml.
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
-      # Test-only image; same reason as in the docker section above.
+      # Same reason as in the docker section above.
       - dependency-name: "maven"
 
   - package-ecosystem: github-actions

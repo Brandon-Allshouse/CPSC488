@@ -26,10 +26,11 @@ services:
       # browser/frontend never connects to it.
       - "127.0.0.1:5432:5432"
     volumes:
-      # Data survives restarts and `docker compose down`; only `down -v` erases it.
-      # Postgres 18+ images keep data under /var/lib/postgresql/<major version>/, so this mounts
-      # the parent folder. A new major version can't read an older one's files: when upgrading,
-      # rename the volume (the old one can be removed with `docker volume rm`).
+      # Data survives restarts and `docker compose down`. Only `down -v` erases it.
+      # Postgres 18 and later keep their files in a subfolder named after the version, which is
+      # why we mount /var/lib/postgresql and not /var/lib/postgresql/data like older guides show.
+      # If you ever bump Postgres to a new major version, also rename this volume. The new version
+      # can't read the old one's files, so it needs to start from an empty database.
       - brainfeed-pgdata:/var/lib/postgresql
     healthcheck:
       # Lets the backend wait until Postgres is actually accepting connections.
@@ -67,7 +68,7 @@ services:
     volumes:
       # Your source code, live: edits show up in the browser without restarting anything.
       - ./frontend:/app
-      # node_modules lives inside Docker, not in your folder. Some packages (esbuild, rollup)
+      # node_modules lives inside Docker, not in your folder. Some packages (rolldown, lightningcss)
       # contain OS-specific binaries, so Windows and Linux can't share one node_modules.
       - frontend-node-modules:/app/node_modules
     ports:

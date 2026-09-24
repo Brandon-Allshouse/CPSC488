@@ -10,7 +10,7 @@ Most short-form video apps are built to keep you scrolling, not to teach you any
 This project is our attempt at flipping that: same familiar scrolling feed, but built
 around educational content instead of whatever an algorithm thinks will keep you hooked.
 
-Users pick a few topics they're interested in — programming, history, biology, whatever —
+Users pick a few topics they're interested in (programming, history, biology, whatever)
 and get a feed of videos that actually explain or teach something about those topics,
 pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content).
 
@@ -156,6 +156,33 @@ docker compose exec frontend npm run audit:security                     # scan n
 CI (`.github/workflows/ci.yml`) runs the tests, the vulnerability checks, the build, a Docker build,
 and CodeQL on every push and pull request.
 
+### Dependency updates
+
+Every week, Dependabot opens one PR for each kind of dependency (npm, Maven, Docker, GitHub
+Actions) with everything that has a new version. CI runs on each one. If CI passes, it's normally
+safe to merge. If it fails, the update needs a code change first, so don't merge it as is.
+
+The exception is Java, Node and Postgres. Dependabot is set up not to suggest new major versions
+of these (see `.github/dependabot.yml`), because each one is set in several files that all have
+to change together. Their image tags (`25-jre`, `24-trixie-slim`, `18`) always point to the latest
+patch release, so CI gets security fixes automatically. Your laptop keeps whatever it downloaded
+first, so run this every so often to get the latest patches:
+
+```powershell
+docker compose pull; docker compose build --pull
+```
+
+When it's time to move to a new version, change everything in one row in a single PR:
+
+| Upgrading | What to change |
+|---|---|
+| Java | `maven.compiler.release` in `backend/pom.xml`, both `FROM` lines in `backend/Dockerfile`, the `backend-tests` image in `docker-compose.yml`, both `java-version` lines in `.github/workflows/ci.yml`, and the Stack section above. Also update the Maven version in those `maven:` tags to the newest one. |
+| Node | The `frontend` image in `docker-compose.yml`, `node-version` in `ci.yml`, and `@types/node` in `frontend/package.json` (to the same major version as Node). |
+| Postgres | The `db` image in `docker-compose.yml`, and rename its volume as the comment there explains. Everyone's local database will start empty. |
+
+Only upgrade to long-term support (LTS) versions: Java 21, 25, 29 and so on (one every two years),
+and even-numbered Node versions. The versions in between only get about six months of updates.
+
 ### Troubleshooting
 
 | Problem | Fix |
@@ -247,7 +274,7 @@ This is a class project, so scope is going to move around as we go. Rough direct
 3. **Later:** LLM-generated short summaries and quiz-style questions for videos/topics in your feed
 4. **Maybe:** TikTok/Instagram as additional content sources, if time allows
 
-Nothing above is locked in — just where things stand right now.
+Nothing above is locked in. It's just where things stand right now.
 
 ## Status
 
