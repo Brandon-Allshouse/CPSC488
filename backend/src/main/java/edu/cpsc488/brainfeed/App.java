@@ -30,9 +30,8 @@ import java.util.stream.Collectors;
  * Backend entry point. Reads settings, connects to Postgres (applying any pending migrations),
  * wires up the controllers, and starts the Javalin HTTP server.
  *
- * <p>To add a new feature: create a controller with a {@code register(RoutesConfig routes)} method
- * (see {@link AuthController}), construct it here, and call {@code register} inside
- * {@code Javalin.create}. Use
+ * <p>To add a feature, give its controller a {@code register(RoutesConfig routes)} method like
+ * {@link AuthController}'s, and call it inside {@code Javalin.create} below. Use
  * {@link AuthController#currentUser} to find out who is making a request.
  */
 public class App {

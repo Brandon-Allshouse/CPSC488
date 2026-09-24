@@ -1,13 +1,11 @@
-# Dependabot checks for new library, image and GitHub Actions versions every week and opens PRs
-# for them (NIST SSDF RV.1, OWASP Top 10 A06). See "Dependency updates" in the README.
+# Weekly dependency update PRs (NIST SSDF RV.1, OWASP Top 10 A06). See "Dependency updates" in
+# the README.
 #
-# Each section groups its updates into a single PR. Related packages often only work when they're
-# upgraded together (vite and @vitejs/plugin-react, react and react-dom), so separate PRs would
-# each fail CI on their own.
+# Each ecosystem is grouped into one PR because related packages often have to be upgraded
+# together, like vite and @vitejs/plugin-react.
 #
-# Java, Node and Postgres major versions are ignored below on purpose. Each one is set in several
-# files that have to change together, and Dependabot would also suggest short-lived releases like
-# Java 26 or Node 25. Upgrade them by hand, using the checklist in the README.
+# Java, Node and Postgres major versions are ignored because they're upgraded by hand. Each is set
+# in several files that have to change at the same time.
 version: 2
 updates:
   - package-ecosystem: maven
@@ -26,8 +24,7 @@ updates:
       npm:
         patterns: ["*"]
     ignore:
-      # These are the type definitions for Node itself, so they should match the Node version we
-      # run, not the newest one. Bump it when you upgrade Node.
+      # Must match the Node major version in docker-compose.yml and ci.yml.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
@@ -41,9 +38,8 @@ updates:
     ignore:
       - dependency-name: "eclipse-temurin"
         update-types: ["version-update:semver-major"]
-      # The Java version is at the end of this tag (3.9.15-eclipse-temurin-25), and Dependabot
-      # treats a change there as an ordinary update. That's how it once tried to move us to
-      # Java 26. It's only used to compile, so we update it by hand along with Java.
+      # Dependabot treats the Java version at the end of this tag as a normal update, so it would
+      # bump Java on its own. Update this image by hand when upgrading Java.
       - dependency-name: "maven"
 
   - package-ecosystem: docker-compose
@@ -56,11 +52,10 @@ updates:
     ignore:
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
-      # A new Postgres major version also needs a new volume name. See the comment on the db
-      # service in docker-compose.yml.
+      # A major upgrade also needs a new volume. See the db service in docker-compose.yml.
       - dependency-name: "postgres"
         update-types: ["version-update:semver-major"]
-      # Same reason as in the docker section above.
+      # Updated by hand with Java, as in the docker section above.
       - dependency-name: "maven"
 
   - package-ecosystem: github-actions

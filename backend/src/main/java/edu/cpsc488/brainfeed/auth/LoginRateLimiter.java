@@ -12,8 +12,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * before the action, then {@link #record} for each attempt that should count (for logins, only
  * failed ones).
  *
- * <p>Counts live in memory, so they reset when the backend restarts and aren't shared if we ever
- * run more than one backend. That's fine for now; see "Known gaps" in SECURITY.md.
+ * <p>Counts live in memory, so they reset when the backend restarts and aren't shared between
+ * multiple backend instances. See "Known gaps" in SECURITY.md.
  */
 public class LoginRateLimiter {
 

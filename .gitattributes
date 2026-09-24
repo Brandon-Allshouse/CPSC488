@@ -1,6 +1,5 @@
-# Store and check out text files with Unix (LF) line endings on every OS, so files mounted into
-# Linux containers behave the same no matter whose laptop they came from. Modern Windows editors
-# (VS Code, IntelliJ, Notepad) all handle LF fine.
+# Use Unix (LF) line endings on every OS, so files mounted into Linux containers behave the same
+# no matter whose laptop they came from.
 * text=auto eol=lf
 
 # Windows-only scripts must keep Windows line endings.

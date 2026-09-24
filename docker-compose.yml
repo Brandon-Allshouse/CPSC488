@@ -2,8 +2,7 @@
 #
 #   docker compose up --build
 #
-# The only things you need installed are Docker Desktop and Git. Java, Maven and Node all run
-# inside containers at the versions pinned below and in backend/Dockerfile. See the README.
+# See the README for first-time setup.
 
 name: brainfeed
 
@@ -13,24 +12,19 @@ services:
     environment:
       POSTGRES_DB: brainfeed
       POSTGRES_USER: ${DB_USER:-brainfeed}
-      # Read from .env in the repo root. There is deliberately no default password.
-      # NOTE: Postgres only uses this the FIRST time the database is created. If you change
-      # DB_PASSWORD later, reset the database with `docker compose down -v` (this deletes all
-      # local data) and start it again.
+      # No default on purpose. Postgres only reads this when the database is first created, so
+      # after changing DB_PASSWORD, run `docker compose down -v` (deletes local data).
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env - copy .env.example to .env}
       # Use SCRAM-SHA-256 for database logins instead of the older md5 method.
       POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
     ports:
-      # Bound to 127.0.0.1 so only this machine can reach it: the backend, and database tools
-      # like IntelliJ's if you want to inspect tables. Never exposed to the network, and the
-      # browser/frontend never connects to it.
+      # 127.0.0.1 only, so the database can't be reached from the network. Database tools like
+      # IntelliJ's can still connect from this machine.
       - "127.0.0.1:5432:5432"
     volumes:
-      # Data survives restarts and `docker compose down`. Only `down -v` erases it.
-      # Postgres 18 and later keep their files in a subfolder named after the version, which is
-      # why we mount /var/lib/postgresql and not /var/lib/postgresql/data like older guides show.
-      # If you ever bump Postgres to a new major version, also rename this volume. The new version
-      # can't read the old one's files, so it needs to start from an empty database.
+      # Kept across `docker compose down`; `down -v` erases it. Postgres 18+ stores its files in a
+      # per-version subfolder, so the parent folder is mounted. When moving to a new Postgres major
+      # version, rename this volume, since the new version can't read the old files.
       - brainfeed-pgdata:/var/lib/postgresql
     healthcheck:
       # Lets the backend wait until Postgres is actually accepting connections.
@@ -66,10 +60,10 @@ services:
       # File-change events from Windows don't reach containers, so Vite has to poll for edits.
       VITE_USE_POLLING: "true"
     volumes:
-      # Your source code, live: edits show up in the browser without restarting anything.
+      # Mounted live, so edits hot-reload in the browser.
       - ./frontend:/app
-      # node_modules lives inside Docker, not in your folder. Some packages (rolldown, lightningcss)
-      # contain OS-specific binaries, so Windows and Linux can't share one node_modules.
+      # Kept in a Docker volume because some packages (rolldown, lightningcss) include OS-specific
+      # binaries, so Windows and Linux can't share one node_modules.
       - frontend-node-modules:/app/node_modules
     ports:
       - "127.0.0.1:5173:5173"
