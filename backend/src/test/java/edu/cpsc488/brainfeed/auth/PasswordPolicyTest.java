@@ -7,58 +7,60 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PasswordPolicyTest {
 
-    private static final String BREACHED = "known breached passphrase";
+    // stand in for the real breach check so the tests don't call the internet
+    private static final String LEAKED_PASSWORD = "this one got leaked";
 
-    private final PasswordPolicy policy = new PasswordPolicy(BREACHED::equals);
+    private final PasswordPolicy policy = new PasswordPolicy(LEAKED_PASSWORD::equals);
 
-    private boolean accepts(String password) {
-        return policy.check(password, "alice_99", "alice@example.com").isEmpty();
+    // true if the password would be allowed for this test user
+    private boolean isAllowed(String password) {
+        return policy.check(password, "testuser", "test@sru.edu").isEmpty();
     }
 
     @Test
-    void acceptsLongPassphrase() {
-        assertTrue(accepts("purple otter juggling teacups"));
+    void normalPassphraseIsAllowed() {
+        assertTrue(isAllowed("this is a long password"));
     }
 
     @Test
-    void enforcesNistMinimumOf15() {
-        assertFalse(accepts("fourteen chars"));      // 14
-        assertTrue(accepts("fifteen chars!!"));      // 15
+    void mustBeAtLeast15Characters() {
+        assertFalse(isAllowed("fourteen chars"));   // 14
+        assertTrue(isAllowed("fifteen chars!!"));   // 15
     }
 
     @Test
-    void allowsUpTo128AndRejectsLonger() {
-        assertTrue(accepts("abcdefghij".repeat(12) + "abcdefgh"));   // 128
-        assertFalse(accepts("abcdefghij".repeat(12) + "abcdefghi")); // 129
+    void maxLengthIs128() {
+        assertTrue(isAllowed("abcdefghij".repeat(12) + "abcdefgh"));    // 128
+        assertFalse(isAllowed("abcdefghij".repeat(12) + "abcdefghi"));  // 129
     }
 
     @Test
-    void countsUnicodeCharactersNotBytes() {
-        // 15 emoji = 15 characters even though each is 4 bytes in UTF-8.
-        assertTrue(accepts("🦉🐙🦊🐼🦄".repeat(3)));
+    void emojiCountAsOneCharacterEach() {
+        // each emoji is 4 bytes but should only count as 1 character, so this is 15
+        assertTrue(isAllowed("🦉🐙🦊🐼🦄".repeat(3)));
     }
 
     @Test
-    void noCompositionRules() {
-        // NIST: no required symbols/digits/uppercase. All lowercase with spaces is fine.
-        assertTrue(accepts("just some lowercase words"));
+    void noSymbolsOrNumbersRequired() {
+        // NIST says not to force special characters, uppercase, etc.
+        assertTrue(isAllowed("just some lowercase words"));
     }
 
     @Test
-    void rejectsContextSpecificWords() {
-        assertFalse(accepts("my name is alice_99 okay"));
-        assertFalse(accepts("alice likes long walks"));
-        assertFalse(accepts("i love brainfeed so much"));
+    void cantUseUsernameEmailOrSiteName() {
+        assertFalse(isAllowed("my name is testuser okay"));
+        assertFalse(isAllowed("test is in this password"));
+        assertFalse(isAllowed("my brainfeed password"));
     }
 
     @Test
-    void rejectsRepetitivePasswords() {
-        assertFalse(accepts("aaaaaaaaaaaaaaaaaaaa"));
-        assertFalse(accepts("abababababababababab"));
+    void repeatedCharactersAreRejected() {
+        assertFalse(isAllowed("aaaaaaaaaaaaaaaaaaaa"));
+        assertFalse(isAllowed("abababababababababab"));
     }
 
     @Test
-    void rejectsBreachedPasswords() {
-        assertFalse(accepts(BREACHED));
+    void leakedPasswordIsRejected() {
+        assertFalse(isAllowed(LEAKED_PASSWORD));
     }
 }

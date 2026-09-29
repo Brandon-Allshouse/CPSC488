@@ -11,37 +11,45 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LoginRateLimiterTest {
 
     @Test
-    void blocksAfterMaxAttempts() {
+    void locksOutAfterThreeFailedLogins() {
         LoginRateLimiter limiter = new LoginRateLimiter(3, Duration.ofMinutes(15));
+        String key = "email:test@sru.edu";
+
         for (int i = 0; i < 3; i++) {
-            assertFalse(limiter.isLimited("email:a@b.co"));
-            limiter.record("email:a@b.co");
+            assertFalse(limiter.isLimited(key));
+            limiter.record(key);
         }
-        assertTrue(limiter.isLimited("email:a@b.co"));
-        assertFalse(limiter.isLimited("email:other@b.co"));
+        assertTrue(limiter.isLimited(key));
+
+        // someone else shouldn't get locked out because of this one
+        assertFalse(limiter.isLimited("email:other@sru.edu"));
     }
 
     @Test
-    void resetClearsAttempts() {
+    void successfulLoginResetsTheCount() {
         LoginRateLimiter limiter = new LoginRateLimiter(1, Duration.ofMinutes(15));
-        limiter.record("k");
-        assertTrue(limiter.isLimited("k"));
-        limiter.reset("k");
-        assertFalse(limiter.isLimited("k"));
+        limiter.record("testuser");
+        assertTrue(limiter.isLimited("testuser"));
+
+        limiter.reset("testuser");
+        assertFalse(limiter.isLimited("testuser"));
     }
 
     @Test
-    void attemptsExpireAfterWindow() throws InterruptedException {
+    void lockoutWearsOffAfterTheWindow() throws InterruptedException {
+        // tiny window so the test doesn't have to wait 15 minutes
         LoginRateLimiter limiter = new LoginRateLimiter(1, Duration.ofMillis(50));
-        limiter.record("k");
-        assertTrue(limiter.isLimited("k"));
+        limiter.record("testuser");
+        assertTrue(limiter.isLimited("testuser"));
+
         Thread.sleep(80);
-        assertFalse(limiter.isLimited("k"));
+        assertFalse(limiter.isLimited("testuser"));
     }
 
     @Test
-    void securityLogStripsControlCharacters() {
-        assertEquals("evil_fake log line", SecurityLog.clean("evil\nfake log line"));
+    void newlinesCantBeUsedToFakeLogEntries() {
+        // if an attacker puts \n in a field they could add a made up line to our log
+        assertEquals("testuser_LOGIN_SUCCESS user=admin", SecurityLog.clean("testuser\nLOGIN_SUCCESS user=admin"));
         assertEquals("-", SecurityLog.clean(null));
     }
 }
