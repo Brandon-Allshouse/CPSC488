@@ -61,9 +61,14 @@ export default function VideoCard({ video }: Props) {
           </button>
         )}
       </div>
-      {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-      <h2 className="video-title">{video.title}</h2>
-      <p className="muted">{video.channelTitle}</p>
+      <section className="video-summary" aria-label="Video summary">
+        <p className="video-summary-placeholder">
+          <strong>Video Summary</strong>: video summary unable to be rendered at this time.
+        </p>
+        {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
+        <h2 className="video-title">{video.title}</h2>
+        <p className="muted">{video.channelTitle}</p>
+      </section>
     </article>
   );
 }

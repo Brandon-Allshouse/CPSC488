@@ -26,6 +26,9 @@ describe('VideoCard', () => {
     const { container } = render(<VideoCard video={video} />);
     expect(screen.getByText('How Plants Grow')).toBeTruthy();
     expect(screen.getByText('Test Channel')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Video summary' })).toBeTruthy();
+    expect(screen.getByText('Video Summary').tagName).toBe('STRONG');
+    expect(screen.getByText(/video summary unable to be rendered at this time/)).toBeTruthy();
     expect(container.querySelector('img')?.getAttribute('src')).toBe('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
     expect(container.querySelector('iframe')).toBeNull();
   });

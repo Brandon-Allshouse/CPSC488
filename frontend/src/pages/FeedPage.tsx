@@ -44,6 +44,13 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     }
   }
 
+  function scrollFeed(direction: -1 | 1) {
+    const list = listRef.current;
+    if (list) {
+      list.scrollBy({ top: direction * list.clientHeight, behavior: 'smooth' });
+    }
+  }
+
   // Load the next page when the invisible marker under the last video comes within 600px.
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -79,6 +86,15 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
           </button>
         </div>
       </header>
+
+      <nav className="feed-scroll-controls" aria-label="Feed navigation">
+        <button type="button" aria-label="Scroll up" onClick={() => scrollFeed(-1)}>
+          ↑
+        </button>
+        <button type="button" aria-label="Scroll down" onClick={() => scrollFeed(1)}>
+          ↓
+        </button>
+      </nav>
 
       <div ref={listRef} className="feed-list">
         {videos.map((video) => (
