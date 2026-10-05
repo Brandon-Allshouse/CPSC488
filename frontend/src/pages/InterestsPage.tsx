@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
+import brainLogo from '../assets/brainfeed-logo.png';
 
 interface Props {
   /** Topic ids that start out selected. */
@@ -48,6 +49,7 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
 
   return (
     <main className="center-screen">
+      <img className="auth-logo" src={brainLogo} alt="BrainFeed brain logo" />
       <section className="auth-card interests-card" aria-labelledby="interests-title">
         <header className="auth-header">
           <p className="brand">BrainFeed</p>

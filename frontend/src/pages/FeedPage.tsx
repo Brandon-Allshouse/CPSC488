@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../api/auth';
 import { fetchFeed, type Video } from '../api/feed';
+import brainLogo from '../assets/brainfeed-logo.png';
 import VideoCard from '../components/VideoCard';
 
 interface Props {
@@ -62,8 +63,12 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   return (
     <div className="feed-page">
+      <img className="feed-logo" src={brainLogo} alt="BrainFeed brain logo" />
       <header className="feed-header">
-        <p className="brand">BrainFeed</p>
+        <div className="feed-brand">
+          <img className="feed-brand-logo" src={brainLogo} alt="" />
+          <p className="brand">BrainFeed</p>
+        </div>
         <div className="feed-actions">
           <span className="muted feed-user">{user ? user.username : 'Guest'}</span>
           <button type="button" className="link-button" onClick={onEditInterests}>

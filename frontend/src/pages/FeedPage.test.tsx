@@ -41,6 +41,20 @@ afterEach(() => {
 });
 
 describe('FeedPage', () => {
+  it('shows the brain logo in the bottom-right corner', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('feed-logo');
+  });
+
+  it('shows the brain logo beside the BrainFeed header', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    const brand = screen.getByText('BrainFeed').parentElement!;
+    expect(brand.className).toBe('feed-brand');
+    expect(brand.querySelector('.feed-brand-logo')).toBeTruthy();
+  });
+
   it('loads the first page when the feed opens', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1), makeVideo(2)], nextPage: null });
     const { scrollToBottom } = renderFeed();
