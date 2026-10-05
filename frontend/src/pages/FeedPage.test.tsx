@@ -1,0 +1,119 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchFeed, type Video } from '../api/feed';
+import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
+import FeedPage from './FeedPage';
+
+vi.mock('../api/feed', () => ({ fetchFeed: vi.fn() }));
+
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+
+function makeVideo(n: number): Video {
+  return {
+    youtubeId: `video${String(n).padStart(6, '0')}`,
+    title: `Test video ${n}`,
+    channelTitle: 'Test Channel',
+    topicId: 1,
+    publishedAt: '2026-01-15T10:00:00Z',
+  };
+}
+
+const onEditInterests = vi.fn();
+const onLogout = vi.fn();
+
+function renderFeed(user = testUser as typeof testUser | null) {
+  const result = render(
+    <FeedPage topicIds={[1, 2]} user={user} onEditInterests={onEditInterests} onLogout={onLogout} />,
+  );
+  // the invisible marker at the bottom of the feed that triggers loading more
+  const scrollToBottom = () => scrollInto(result.container.querySelector('.feed-sentinel')!);
+  return { ...result, scrollToBottom };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  useFakeIntersectionObserver();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('FeedPage', () => {
+  it('loads the first page when the feed opens', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1), makeVideo(2)], nextPage: null });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    expect(await screen.findByText('Test video 1')).toBeTruthy();
+    expect(screen.getByText('Test video 2')).toBeTruthy();
+    expect(fetchFeed).toHaveBeenCalledWith([1, 2], expect.any(Number), 0);
+  });
+
+  it('loads the next page when scrolling to the bottom, with the same seed', async () => {
+    vi.mocked(fetchFeed)
+      .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: 1 })
+      .mockResolvedValueOnce({ videos: [makeVideo(2)], nextPage: null });
+    const { scrollToBottom } = renderFeed();
+
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+    scrollToBottom();
+    await screen.findByText('Test video 2');
+
+    const firstSeed = vi.mocked(fetchFeed).mock.calls[0][1];
+    expect(vi.mocked(fetchFeed).mock.calls[1]).toEqual([[1, 2], firstSeed, 1]);
+  });
+
+  it('stops asking for more after the last page', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    scrollToBottom();
+    expect(fetchFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it('says so when there are no videos yet', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+    expect(await screen.findByText('No videos for these topics yet.')).toBeTruthy();
+  });
+
+  it('shows an error and can try again', async () => {
+    vi.mocked(fetchFeed)
+      .mockRejectedValueOnce(new Error('Request failed (502)'))
+      .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: null });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Request failed (502)');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Test video 1')).toBeTruthy();
+  });
+
+  it('shows the username and a log out button', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    expect(screen.getByText('testuser')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(onLogout).toHaveBeenCalled();
+  });
+
+  it('shows Guest and a log in button for guests', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed(null);
+    expect(screen.getByText('Guest')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
+  });
+
+  it('interests button goes to the interest picker', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    fireEvent.click(screen.getByRole('button', { name: 'Interests' }));
+    expect(onEditInterests).toHaveBeenCalled();
+  });
+});

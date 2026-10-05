@@ -4,12 +4,14 @@ import react from '@vitejs/plugin-react';
 // Content-Security-Policy for the built site: the browser will only run scripts and styles that
 // come from our own origin, so injected <script> tags or inline event handlers can't execute.
 // Only applied to production builds, because the dev server needs inline scripts for hot reload.
-// When YouTube embeds are added, extend frame-src / img-src with the YouTube domains.
+// The only outside domains allowed are YouTube's thumbnail server and its privacy-enhanced player
+// (see components/VideoCard.tsx). Add specific domains only, never wildcards like https:.
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: https://i.ytimg.com",
+  "frame-src https://www.youtube-nocookie.com",
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",

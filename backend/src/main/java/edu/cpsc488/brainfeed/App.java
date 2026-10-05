@@ -12,6 +12,11 @@ import edu.cpsc488.brainfeed.auth.PasswordPolicy;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.Database;
+import edu.cpsc488.brainfeed.feed.FeedController;
+import edu.cpsc488.brainfeed.feed.FeedRefresher;
+import edu.cpsc488.brainfeed.feed.TopicRepository;
+import edu.cpsc488.brainfeed.feed.VideoRepository;
+import edu.cpsc488.brainfeed.feed.YouTubeClient;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HandlerType;
@@ -24,6 +29,9 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -76,6 +84,24 @@ public class App {
         PasswordPolicy policy = new PasswordPolicy(breachCheck ? new BreachedPasswordChecker() : password -> false);
         AuthController auth = new AuthController(users, sessions, hasher, policy, secureCookies);
 
+        TopicRepository topics = new TopicRepository(dataSource);
+        VideoRepository videos = new VideoRepository(dataSource);
+        FeedController feed = new FeedController(topics, videos, auth);
+        // Optional: without a key the app still runs, but no new videos are fetched.
+        String youtubeKey = settings.get("YOUTUBE_API_KEY", null);
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "feed-refresher");
+            thread.setDaemon(true);
+            return thread;
+        });
+        if (youtubeKey == null) {
+            log.warn("YOUTUBE_API_KEY is not set, so no videos will be fetched. See .env.example.");
+        } else {
+            // Right away, then every hour. Each run only searches topics not refreshed in a day.
+            FeedRefresher refresher = new FeedRefresher(topics, videos, new YouTubeClient(youtubeKey));
+            scheduler.scheduleWithFixedDelay(refresher, 0, 1, TimeUnit.HOURS);
+        }
+
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
@@ -110,9 +136,11 @@ public class App {
 
             config.routes.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
             auth.register(config.routes);
+            feed.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            scheduler.shutdownNow();
             app.stop();
             dataSource.close();
         }));
@@ -149,7 +177,7 @@ public class App {
      *       allowed, because they don't carry a victim's browser cookies.</li>
      * </ul>
      *
-     * The frontend's {@code request()} helper in {@code api/auth.ts} sets the header automatically.
+     * The frontend's {@code request()} helper in {@code api/client.ts} sets the header automatically.
      */
     private static void rejectCrossSiteWrites(Context ctx, Set<String> allowedOrigins) {
         if (!STATE_CHANGING.contains(ctx.method())) {
@@ -166,7 +194,7 @@ public class App {
     }
 
     /** Decodes the base64 pepper from .env and checks it's long enough (256 bits). */
-    private static byte[] decodePepper(String value) {
+    static byte[] decodePepper(String value) {
         String howTo = " See \"Create your .env file\" in the README for how to generate one.";
         byte[] bytes;
         try {

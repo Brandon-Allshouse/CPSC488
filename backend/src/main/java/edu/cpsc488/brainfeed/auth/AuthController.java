@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed.auth;
 
 import edu.cpsc488.brainfeed.ApiException;
+import edu.cpsc488.brainfeed.RequestBodies;
 import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
@@ -86,16 +87,16 @@ public class AuthController {
         // hashing) and can still be used to probe which emails are taken.
         registrations.record(ipKey);
 
-        RegisterRequest req = parse(ctx, RegisterRequest.class);
+        RegisterRequest req = RequestBodies.parse(ctx, RegisterRequest.class);
         String email = normalizeEmail(req.email());
         String username = req.username() == null ? "" : req.username().trim();
         // Passwords are never trimmed or truncated (NIST SP 800-63B).
         String password = req.password() == null ? "" : req.password();
 
-        if (email.length() > MAX_EMAIL || !EMAIL.matcher(email).matches()) {
+        if (!isValidEmail(email)) {
             throw ApiException.badRequest("Please enter a valid email address.");
         }
-        if (!USERNAME.matcher(username).matches()) {
+        if (!isValidUsername(username)) {
             throw ApiException.badRequest("Username must be 3-30 characters: letters, numbers, or underscores.");
         }
         Optional<String> passwordProblem = policy.check(password, username, email);
@@ -111,7 +112,7 @@ public class AuthController {
     }
 
     private void handleLogin(Context ctx) {
-        LoginRequest req = parse(ctx, LoginRequest.class);
+        LoginRequest req = RequestBodies.parse(ctx, LoginRequest.class);
         String email = normalizeEmail(req.email());
         String password = req.password() == null ? "" : req.password();
 
@@ -222,22 +223,16 @@ public class AuthController {
     }
 
     // Emails are compared and stored lowercase so "Alice@X.com" and "alice@x.com" are one account.
-    private static String normalizeEmail(String email) {
+    static String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** Parses the JSON body, turning any parse problem into a 400 instead of a 500. */
-    private static <T> T parse(Context ctx, Class<T> type) {
-        try {
-            T body = ctx.bodyAsClass(type);
-            if (body == null) {
-                throw ApiException.badRequest("Request body is required.");
-            }
-            return body;
-        } catch (ApiException e) {
-            throw e;
-        } catch (Exception e) {
-            throw ApiException.badRequest("Malformed request body.");
-        }
+    /** Expects an already normalized email. Same rule as the V2 migration and validation.ts. */
+    static boolean isValidEmail(String email) {
+        return email.length() <= MAX_EMAIL && EMAIL.matcher(email).matches();
+    }
+
+    static boolean isValidUsername(String username) {
+        return USERNAME.matcher(username).matches();
     }
 }

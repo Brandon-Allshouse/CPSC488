@@ -52,14 +52,7 @@ public class BreachedPasswordChecker implements Predicate<String> {
                 log.warn("Breached-password check skipped: HTTP {}", response.statusCode());
                 return false;
             }
-            for (String line : response.body().split("\r?\n")) {
-                String[] parts = line.split(":");
-                if (parts.length == 2 && parts[0].equalsIgnoreCase(suffix)) {
-                    // Padding entries have a count of 0.
-                    return Long.parseLong(parts[1].trim()) > 0;
-                }
-            }
-            return false;
+            return foundInRange(response.body(), suffix);
         } catch (IOException | NumberFormatException e) {
             log.warn("Breached-password check skipped: {}", e.toString());
             return false;
@@ -69,7 +62,21 @@ public class BreachedPasswordChecker implements Predicate<String> {
         }
     }
 
-    private static String sha1Hex(String value) {
+    /**
+     * Looks for our hash suffix in a range response. Each line is "SUFFIX:COUNT", and padding
+     * lines have a count of 0, so they don't count as a match.
+     */
+    static boolean foundInRange(String body, String suffix) {
+        for (String line : body.split("\r?\n")) {
+            String[] parts = line.split(":");
+            if (parts.length == 2 && parts[0].equalsIgnoreCase(suffix)) {
+                return Long.parseLong(parts[1].trim()) > 0;
+            }
+        }
+        return false;
+    }
+
+    static String sha1Hex(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-1").digest(value.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().withUpperCase().formatHex(digest);

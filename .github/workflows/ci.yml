@@ -53,6 +53,8 @@ jobs:
         run: npm ci
       - name: Check dependencies for known vulnerabilities
         run: npm audit --audit-level=high
+      - name: Unit tests
+        run: npm test
       - name: Type-check and build
         run: npm run build
 

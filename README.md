@@ -26,8 +26,8 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 
 ## Stack (subject to change)
 
-- **Backend:** Java 25, using Javalin 7, built with Maven
-- **Frontend:** React 19 + TypeScript, built with Vite (Node 24)
+- **Backend:** Java 25, using Javalin 7, built with Maven, tested with JUnit
+- **Frontend:** React 19 + TypeScript, built with Vite (Node 24), tested with Vitest
 - **Database:** PostgreSQL 18. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
 - **Local development:** Docker Compose runs all of the above, so the only tools you need are Docker Desktop and Git
 - **External services:** YouTube Data API, plus an LLM API for content classification (and later, generation)
@@ -45,11 +45,14 @@ only the backend has its password.
 backend/                      Java backend (Maven project; Dockerfile builds and runs it)
   src/main/java/.../App.java    entry point: settings, security headers, routes
   src/main/java/.../auth/       accounts, login sessions, password hashing
+  src/main/java/.../feed/       topics, interests, video feed, YouTube client
   src/main/resources/db/migration/   database schema (Flyway SQL files)
-  src/test/                     unit tests
+  src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, HomePage
+  src/pages/                    LoginPage, InterestsPage, FeedPage
+  src/components/               VideoCard (one video in the feed)
   src/api/                      typed calls to the backend
+  src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
 docker-compose.yml            runs the whole app locally: database, backend, frontend
 .env.example                  template for your local settings and secrets
 SECURITY.md                   security requirements. Read before touching auth code
@@ -149,12 +152,26 @@ docker compose down -v               # ERASES the local database and cached pack
 ```powershell
 docker compose run --rm backend-tests                                   # backend unit tests
 docker compose run --rm backend-tests mvn -B verify -P security-scan    # scan Java libraries for known vulnerabilities (slow the first time)
+docker compose exec frontend npm test                                   # frontend unit tests (app must be running)
 docker compose exec frontend npm run build                              # TypeScript type-check + production build (app must be running)
 docker compose exec frontend npm run audit:security                     # scan npm packages for known vulnerabilities (app must be running)
 ```
 
 The security scan needs a free `NVD_API_KEY` in `.env` (see `.env.example`). The first run downloads
 the vulnerability database, which takes a while; later runs reuse it.
+
+**Writing tests.** Every new class or component should come with unit tests.
+
+- Backend tests use JUnit and live in `backend/src/test/java`, in the same package as the class
+  they test (for example, `feed/FeedControllerTest.java`). Unit tests don't use the database or
+  call YouTube. Keep logic that's worth testing in small methods, like
+  `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`). The endpoints
+  and SQL will be covered by API tests that run against a real database; those haven't been added yet.
+- Frontend tests use [Vitest](https://vitest.dev) and sit next to the file they test
+  (`FeedPage.tsx` → `FeedPage.test.tsx`). Component tests start with `// @vitest-environment jsdom`
+  and use React Testing Library. They mock the `api/` modules so no backend is needed.
+  `src/test/fakeIntersectionObserver.ts` lets a test pretend the user scrolled.
+- Use plain test data like `test@sru.edu` and `testuser`.
 
 CI (`.github/workflows/ci.yml`) runs the tests, the vulnerability checks, the build, a Docker build,
 and CodeQL on every push and pull request.
@@ -318,7 +335,24 @@ Then start your next change from step 1.
 
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
-`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`, `NVD_API_KEY`.
+`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`,
+`YOUTUBE_API_KEY`, `NVD_API_KEY`.
+
+### Getting a YouTube API key
+
+The feed shows videos fetched from YouTube. Without a key the app still runs, but the feed stays
+empty. Each person gets their own free key:
+
+1. Go to https://console.cloud.google.com, sign in, and create a project (any name).
+2. Open **APIs & Services → Library**, search for **YouTube Data API v3**, and click **Enable**.
+3. Open **APIs & Services → Credentials → Create credentials → API key**. Copy the key.
+4. Click the new key, and under **API restrictions** choose **Restrict key → YouTube Data API v3**,
+   then save. That way a leaked key can't be used for any other Google service.
+5. Paste it after `YOUTUBE_API_KEY=` in `.env`, then `Ctrl+C` and `docker compose up` again.
+
+Within a minute of starting, the backend logs `Fetched N videos for topic ...` for each topic. The
+free quota is 10,000 units a day and each topic search costs 100, so the backend refreshes each
+topic at most once a day (about 1,000 units). Restarting doesn't fetch again.
 
 ## Auth API
 
@@ -332,8 +366,23 @@ All request and response bodies are JSON. Errors look like `{ "error": "message 
 | GET    | `/api/auth/me`       | none                            | `200 { user }`, or `401` if not logged in          |
 
 `user` is `{ id, email, username, createdAt }`. Other error codes: `400` invalid input, `409` email or
-username taken, `429` too many attempts. Every POST must send `Content-Type: application/json`
-(the frontend's `request()` helper does this).
+username taken, `429` too many attempts. Every POST and PUT must send `Content-Type: application/json`
+(the frontend's `request()` helper in `api/client.ts` does this).
+
+## Feed API
+
+| Method | Path                | Body / query                       | Success response                                         |
+|--------|---------------------|------------------------------------|----------------------------------------------------------|
+| GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name }] }`                         |
+| GET    | `/api/me/interests` | none (login required)              | `200 { topicIds }`, empty if none picked yet             |
+| PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
+| GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage }`; `nextPage` is null at the end |
+
+The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
+A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
+feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
+scrolling. Videos are served from our database (filled once a day per topic by `FeedRefresher`),
+so browsing never spends YouTube quota.
 
 ## Security
 
@@ -355,4 +404,5 @@ Nothing above is locked in. It's just where things stand right now.
 ## Status
 
 Accounts are in place: sign up, log in, log out, and guest mode, with the backend, database and
-security baseline set up. Next up: interest selection and the video feed.
+security baseline set up. Users (and guests) pick interests and get a scrolling feed of short
+educational YouTube videos for those topics. Next up: thumbs up/down feeding back into the feed.

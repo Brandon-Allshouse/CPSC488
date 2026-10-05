@@ -79,6 +79,17 @@ Browser ──HTTPS──▶ React frontend ──/api (same origin)──▶ Ja
 | Information leakage | Generic 500 errors, no stack traces to clients, no server version header, `Cache-Control: no-store` |
 | Default credentials | None. The backend and docker compose refuse to start without `DB_PASSWORD` and `PASSWORD_PEPPER` |
 
+### Interests, feed and YouTube (OWASP Top 10 A01, A03, A08; ASVS V4, V5, V12)
+
+| Requirement | Implementation |
+|---|---|
+| Users can only read or change their own interests | `/api/me/interests` takes the user from the session cookie only; the request has no user id to tamper with |
+| Validate all input | Topic ids must be real topics; feed `page` is capped; unknown JSON fields rejected; DB `CHECK`s on video ids and text lengths |
+| API key never reaches the browser | `YOUTUBE_API_KEY` lives in `.env`; only `YouTubeClient` (backend) calls YouTube, and its error messages never include the key |
+| YouTube data is untrusted | Video ids must match YouTube's 11-character format; titles are stripped of control characters, length-capped and shown only as React text |
+| Browsing can't exhaust API quota | The feed is served from the database only; the backend searches YouTube at most once per topic per day |
+| Limit what the embedded player can do | Privacy-enhanced `youtube-nocookie.com` player, loaded only when the user presses play, in a `sandbox`ed iframe; the CSP allows only `www.youtube-nocookie.com` frames and `i.ytimg.com` images |
+
 ### Logging (OWASP Top 10 A09, OWASP Logging Cheat Sheet)
 
 Login, logout, registration, rate-limit and policy rejections are logged under the `security` logger
@@ -93,13 +104,13 @@ and control characters are stripped so user input can't forge log lines.
 | PS.1 Protect code and secrets | `.env` is gitignored; secrets come only from the environment |
 | PW.4 Reuse well-secured components | Maintained libraries only (Javalin, BouncyCastle, Flyway, HikariCP, pgJDBC) with pinned versions, on long-term support (LTS) releases of Java and Node |
 | PW.7 Review code | Security-relevant PRs are reviewed against this document; CodeQL runs on every PR |
-| PW.8 Test | Unit tests for hashing, password policy, rate limiting and log sanitizing; run in CI |
+| PW.8 Test | Unit tests run in CI. Backend: hashing, password policy, breach-list matching, rate limiting, log sanitizing, email/username rules, pepper and `.env` loading, YouTube response handling, feed input checks. Frontend: input validation, the API helper's CSRF header, and every page and component (including that YouTube titles render as plain text and the player is sandboxed). The endpoints themselves aren't tested against a real database yet (planned API tests) |
 | RV.1 Find vulnerabilities | Weekly Dependabot PRs (see "Dependency updates" in the README), `npm audit` in CI, and OWASP Dependency-Check run by hand (`mvn verify -P security-scan`) |
 
 ## Checklist for new features
 
-The features on the roadmap (video feed, interests, YouTube and LLM APIs) bring new risks. Most of
-the protections above apply automatically, but a few are up to you:
+New features (likes, history, LLM APIs) bring new risks. Most of the protections above apply
+automatically, but a few are up to you:
 
 - **New endpoints** get the security headers and CSRF checks automatically (the `before` handler
   in `App.java`). If an endpoint needs a logged-in user, call `AuthController.currentUser` and
@@ -111,8 +122,9 @@ the protections above apply automatically, but a few are up to you:
   calls those APIs, so keys never reach the browser.
 - **Anything from YouTube or an LLM is untrusted input**, just like user input. Show it as plain
   text through React. Never use it as HTML or put it in SQL without placeholders.
-- **YouTube embeds** need the Content-Security-Policy in `frontend/vite.config.ts` to allow
-  YouTube's domains. Add only the specific domains you need, not wildcards like `https:`.
+- **New outside domains** (images, embeds, APIs called from the browser) must be added to the
+  Content-Security-Policy in `frontend/vite.config.ts`. Add only the specific domains you need,
+  not wildcards like `https:`.
 
 ## Known gaps and accepted risks
 
@@ -128,3 +140,5 @@ Things we know aren't covered yet, and what would need to change:
 5. **The breached-password check fails open** if Have I Been Pwned is unreachable, so an outage doesn't block sign-ups. The other policy rules still apply.
 6. **HTTPS is a deployment requirement.** Deploy behind TLS 1.2+, set `COOKIE_SECURE=true`, and send the CSP and `frame-ancestors` as HTTP headers from the web server.
 7. **The pepper can't be rotated.** Changing it would stop every existing password from working, and without a password reset those accounts would be lost. Store it in a secrets manager in production.
+8. **The topic, interest and feed endpoints have no rate limit.** They only do small, indexed database reads (the feed never calls YouTube), so the risk is low, but a flood of requests could still load the database. Add a per-IP limit (like `LoginRateLimiter`) before any public deployment.
+9. **Embedded videos are third-party content.** We can't vet every video YouTube returns; safe search, the Education category and the topic queries are the only filters. Watching a video sends the viewer's IP to YouTube (Google), as with any embed.

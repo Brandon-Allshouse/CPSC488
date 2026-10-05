@@ -35,7 +35,7 @@ final class DotEnv {
         return Map.of();
     }
 
-    private static Map<String, String> parse(Path file) {
+    static Map<String, String> parse(Path file) {
         Map<String, String> values = new HashMap<>();
         try {
             for (String raw : Files.readAllLines(file)) {

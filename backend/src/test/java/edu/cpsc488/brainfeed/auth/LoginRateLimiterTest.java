@@ -47,9 +47,19 @@ class LoginRateLimiterTest {
     }
 
     @Test
-    void newlinesCantBeUsedToFakeLogEntries() {
-        // if an attacker puts \n in a field they could add a made up line to our log
-        assertEquals("testuser_LOGIN_SUCCESS user=admin", SecurityLog.clean("testuser\nLOGIN_SUCCESS user=admin"));
-        assertEquals("-", SecurityLog.clean(null));
+    void windowIsWhatWePassedIn() {
+        LoginRateLimiter limiter = new LoginRateLimiter(10, Duration.ofMinutes(15));
+        assertEquals(Duration.ofMinutes(15), limiter.window());
+    }
+
+    @Test
+    void lotsOfDifferentKeysStillWork() {
+        // goes past the cleanup threshold to make sure cleanup doesn't break anything
+        LoginRateLimiter limiter = new LoginRateLimiter(1, Duration.ofMinutes(15));
+        for (int i = 0; i < 10_050; i++) {
+            limiter.record("email:user" + i + "@sru.edu");
+        }
+        assertTrue(limiter.isLimited("email:user10049@sru.edu"));
+        assertFalse(limiter.isLimited("email:test@sru.edu"));
     }
 }
