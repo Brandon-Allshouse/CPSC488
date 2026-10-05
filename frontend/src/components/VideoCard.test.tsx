@@ -26,11 +26,34 @@ describe('VideoCard', () => {
     const { container } = render(<VideoCard video={video} />);
     expect(screen.getByText('How Plants Grow')).toBeTruthy();
     expect(screen.getByText('Test Channel')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Video summary' })).toBeTruthy();
+    const summaryBox = screen.getByRole('region', { name: 'Video summary' });
+    expect(summaryBox).toBeTruthy();
     expect(screen.getByText('Video Summary').tagName).toBe('STRONG');
-    expect(screen.getByText(/video summary unable to be rendered at this time/)).toBeTruthy();
+    expect(summaryBox.textContent).not.toMatch(/unable to be rendered/i);
+    expect(summaryBox.textContent!.indexOf('Test Channel')).toBeLessThan(
+      summaryBox.textContent!.indexOf('Video Summary'),
+    );
     expect(container.querySelector('img')?.getAttribute('src')).toBe('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
     expect(container.querySelector('iframe')).toBeNull();
+  });
+
+  it('shows separate feedback buttons with tooltips and toggleable pressed states', () => {
+    render(<VideoCard video={video} />);
+    const like = screen.getByRole('button', { name: 'I liked this video' });
+    const dislike = screen.getByRole('button', { name: "I didn't really like this video" });
+
+    expect(screen.getByRole('tooltip', { name: 'I liked this video' })).toBeTruthy();
+    expect(screen.getByRole('tooltip', { name: "I didn't really like this video" })).toBeTruthy();
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(dislike.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(like);
+    expect(like.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(dislike);
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(dislike.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(dislike);
+    expect(dislike.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('loads the privacy-enhanced YouTube player when play is pressed', () => {

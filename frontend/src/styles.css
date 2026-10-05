@@ -369,8 +369,94 @@ form {
   background: var(--card);
 }
 
-.video-summary-placeholder {
-  margin: 0 0 0.75rem;
+.video-summary-label {
+  margin: 0.75rem 0 0;
+}
+
+.video-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.video-title-row .video-title {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5rem;
+}
+
+.video-feedback {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.video-feedback-button {
+  position: relative;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0.15rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.video-feedback-button svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.video-feedback-like {
+  color: #43b75d;
+}
+
+.video-feedback-dislike {
+  color: #e35b5b;
+}
+
+.video-feedback-dislike svg {
+  transform: rotate(180deg);
+}
+
+.video-feedback-button[aria-pressed='true'] {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.video-feedback-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.video-feedback-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: normal;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.video-feedback-button:hover .video-feedback-tooltip,
+.video-feedback-button:focus-visible .video-feedback-tooltip {
+  visibility: visible;
+  opacity: 1;
 }
 
 .video-frame iframe,
