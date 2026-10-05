@@ -77,6 +77,9 @@ services:
     profiles: ["test"]
     working_dir: /app
     command: mvn -B test
+    environment:
+      # Only used by the security-scan profile (see .env.example).
+      NVD_API_KEY: ${NVD_API_KEY:-}
     volumes:
       - ./backend:/app
       # Keeps downloaded libraries between runs so tests start fast after the first time.

@@ -113,7 +113,7 @@
         <!--
           Scans all dependencies for known vulnerabilities (OWASP Top 10 A06, NIST SSDF PW.4 / RV.1).
           Run with: mvn verify -P security-scan
-          The first run downloads the NVD database and is slow; set NVD_API_KEY to speed it up.
+          Requires NVD_API_KEY (see .env.example). The first run downloads the NVD database and is slow.
         -->
         <profile>
             <id>security-scan</id>

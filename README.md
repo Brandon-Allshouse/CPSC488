@@ -153,6 +153,9 @@ docker compose exec frontend npm run build                              # TypeSc
 docker compose exec frontend npm run audit:security                     # scan npm packages for known vulnerabilities (app must be running)
 ```
 
+The security scan needs a free `NVD_API_KEY` in `.env` (see `.env.example`). The first run downloads
+the vulnerability database, which takes a while; later runs reuse it.
+
 CI (`.github/workflows/ci.yml`) runs the tests, the vulnerability checks, the build, a Docker build,
 and CodeQL on every push and pull request.
 
@@ -315,7 +318,7 @@ Then start your next change from step 1.
 
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
-`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`.
+`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`, `NVD_API_KEY`.
 
 ## Auth API
 
