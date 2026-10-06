@@ -26,6 +26,11 @@ function chip(name: string) {
 }
 
 describe('InterestsPage', () => {
+  it('shows the brain logo in the top-left corner', () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('auth-logo');
+  });
+
   it('lists the topics from the backend', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     expect(await screen.findByRole('button', { name: 'Math' })).toBeTruthy();

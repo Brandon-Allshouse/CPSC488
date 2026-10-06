@@ -62,9 +62,6 @@ services:
     volumes:
       # Mounted live, so edits hot-reload in the browser.
       - ./frontend:/app
-      # Kept in a Docker volume because some packages (rolldown, lightningcss) include OS-specific
-      # binaries, so Windows and Linux can't share one node_modules.
-      - frontend-node-modules:/app/node_modules
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:

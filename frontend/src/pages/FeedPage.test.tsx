@@ -41,6 +41,35 @@ afterEach(() => {
 });
 
 describe('FeedPage', () => {
+  it('shows the brain logo in the bottom-right corner', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('feed-logo');
+  });
+
+  it('shows the brain logo beside the BrainFeed header', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    renderFeed();
+    const brand = screen.getByText('BrainFeed').parentElement!;
+    expect(brand.className).toBe('feed-brand');
+    expect(brand.querySelector('.feed-brand-logo')).toBeTruthy();
+  });
+
+  it('scrolls the feed up and down when the navigation buttons are pressed', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+    const { container } = renderFeed();
+    const list = container.querySelector('.feed-list')!;
+    const scrollBy = vi.fn();
+    Object.defineProperty(list, 'clientHeight', { value: 600 });
+    Object.defineProperty(list, 'scrollBy', { value: scrollBy });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Scroll up' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Scroll down' }));
+
+    expect(scrollBy).toHaveBeenNthCalledWith(1, { top: -600, behavior: 'smooth' });
+    expect(scrollBy).toHaveBeenNthCalledWith(2, { top: 600, behavior: 'smooth' });
+  });
+
   it('loads the first page when the feed opens', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1), makeVideo(2)], nextPage: null });
     const { scrollToBottom } = renderFeed();

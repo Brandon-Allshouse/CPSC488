@@ -153,9 +153,12 @@ docker compose down -v               # ERASES the local database and cached pack
 docker compose run --rm backend-tests                                   # backend unit tests
 docker compose run --rm backend-tests mvn -B verify -P security-scan    # scan Java libraries for known vulnerabilities (slow the first time)
 docker compose exec frontend npm test                                   # frontend unit tests (app must be running)
+docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx   # run one frontend test file
 docker compose exec frontend npm run build                              # TypeScript type-check + production build (app must be running)
 docker compose exec frontend npm run audit:security                     # scan npm packages for known vulnerabilities (app must be running)
 ```
+
+Run frontend tests with Vitest, not `node` directly: Node does not execute `.ts` or `.tsx` test files.
 
 The security scan needs a free `NVD_API_KEY` in `.env` (see `.env.example`). The first run downloads
 the vulnerability database, which takes a while; later runs reuse it.
@@ -213,6 +216,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Docker Desktop: "WSL 2 installation is incomplete" or "WSL needs updating" | Run `wsl --update` in PowerShell, then restart Docker Desktop. |
 | Docker Desktop: "Virtualization support not detected" | Virtualization is turned off in your laptop's BIOS/UEFI settings. Search your laptop model + "enable virtualization". |
 | `env file ...\.env not found` or `Set DB_PASSWORD in .env` | `.env` is missing or misnamed. It must be in the `CPSC488` folder and named exactly `.env`. Check with `Get-ChildItem -Force .env`; Notepad sometimes saves it as `.env.txt`. |
+| Node reports `Unknown file extension ".tsx"` when you run a frontend test | Don't launch the test file with `node`. Run it through Vitest instead: `docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx` (the app must be running). |
 | Backend: `DB_PASSWORD is not set` or `PASSWORD_PEPPER ...` | That value in `.env` is blank or invalid. Generate one as in step 1. |
 | Backend: `password authentication failed for user "..."` | `DB_PASSWORD` changed after the database was created. Reset the local database: `docker compose down -v`, then `docker compose up --build`. This erases local data. |
 | Database starts empty after pulling the PostgreSQL 18 upgrade | Expected: Postgres can't read data files from an older major version, so the database moved to a new volume and starts fresh. Sign up again. To free the old volume's disk space: `docker volume rm brainfeed_brainfeed-data`. |
