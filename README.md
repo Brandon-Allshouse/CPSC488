@@ -59,6 +59,8 @@ frontend/                     React app (Vite project)
 docker-compose.yml            runs the whole app locally: database, backend, frontend
 .env.example                  template for your local settings and secrets
 SECURITY.md                   security requirements. Read before touching auth code
+PRESENTATION.md               how to demo the project, and which code to show
+pgadmin/servers.json          sets up the optional database GUI (see "Looking at the database")
 ```
 
 ## Running locally
@@ -343,7 +345,7 @@ Then start your next change from step 1.
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
 `PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`,
-`YOUTUBE_API_KEY`, `NVD_API_KEY`.
+`YOUTUBE_API_KEY`, `NVD_API_KEY`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
 
 ### Getting a YouTube API key
 
@@ -371,6 +373,44 @@ Both share a budget of 80 searches (8,000 units) per 24 hours. The count comes f
 so restarting doesn't reset it or fetch again. After a YouTube error (usually the quota or a bad
 key), new-topic fetching pauses for 15 minutes. If the budget is used up, the feed says there are
 no videos yet, and they get fetched the next day.
+
+### Looking at the database
+
+The database only accepts connections from your own laptop, and the app (or at least
+`docker compose up -d db`) has to be running. There are two ways to look inside it.
+
+**In the browser, with pgAdmin** (the official PostgreSQL admin tool). One-time setup: put a
+password after `PGADMIN_PASSWORD=` in `.env` (a generated secret like in step 1, or any long
+password). Then:
+
+```powershell
+docker compose --profile tools up -d pgadmin
+```
+
+Open **http://localhost:5050** and log in with `PGADMIN_EMAIL` (`admin@sru.edu` unless you changed
+it) and `PGADMIN_PASSWORD`. In the left sidebar, open **Servers → BrainFeed (local)**. It asks for
+the database password: that's `DB_PASSWORD` from `.env` (tick "Save password" so it only asks
+once). Then go to **Databases → brainfeed → Schemas → public → Tables**. Right-click a table and
+pick **View/Edit Data → All Rows**, or open **Tools → Query Tool** to run SQL. Right-clicking
+`brainfeed` → **ERD For Database** draws how the tables connect.
+
+pgAdmin only starts with `--profile tools`, so a plain `docker compose up` doesn't run it. Stop it
+with `docker compose stop pgadmin`. If your `DB_USER` isn't `brainfeed`, right-click the server →
+**Properties → Connection** and change the username.
+
+**In the terminal, with psql** (nothing to set up):
+
+```powershell
+docker compose exec db sh -c 'psql -U $POSTGRES_USER -d brainfeed'
+```
+
+Type SQL at the `brainfeed=#` prompt (`\dt` lists the tables, `\q` quits). Open the prompt first
+and then type queries. Don't pass a query with `-c "..."`, because Windows PowerShell strips the
+inner quotes. [PRESENTATION.md](PRESENTATION.md#appendix-looking-inside-the-database-yourself) has a
+list of useful queries.
+
+Stick to looking. If you change data by hand and break something, `docker compose down -v` resets
+the local database (and erases everything in it).
 
 ## Auth API
 

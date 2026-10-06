@@ -77,7 +77,7 @@ Browser ──HTTPS──▶ React frontend ──/api (same origin)──▶ Ja
 | Clickjacking / MIME sniffing | `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff` |
 | Unexpected input | Strict JSON (unknown fields rejected), length and format validation, DB `CHECK` constraints |
 | Information leakage | Generic 500 errors, no stack traces to clients, no server version header, `Cache-Control: no-store` |
-| Default credentials | None. The backend and docker compose refuse to start without `DB_PASSWORD` and `PASSWORD_PEPPER` |
+| Default credentials | None. The backend and docker compose refuse to start without `DB_PASSWORD` and `PASSWORD_PEPPER`, and the optional pgAdmin refuses to start without `PGADMIN_PASSWORD` |
 
 ### Interests, feed and YouTube (OWASP Top 10 A01, A03, A08; ASVS V4, V5, V12)
 
@@ -143,3 +143,4 @@ Things we know aren't covered yet, and what would need to change:
 7. **The pepper can't be rotated.** Changing it would stop every existing password from working, and without a password reset those accounts would be lost. Store it in a secrets manager in production.
 8. **The topic, interest and feed endpoints have no rate limit.** They only do small, indexed database reads, so the risk is low. The feed can start YouTube searches for never-searched topics, but the 80-searches-a-day budget caps that, so a flood can't run up the quota. It could still load the database, or use up the day's budget so other users' new topics wait until tomorrow. Add a per-IP limit (like `LoginRateLimiter`) before any public deployment.
 9. **Embedded videos are third-party content.** We can't vet every video YouTube returns; safe search, the Education category and the topic queries are the only filters. Watching a video sends the viewer's IP to YouTube (Google), as with any embed.
+10. **pgAdmin is a local development tool only.** It gives full read and write access to the database, so it's locked down: it only starts with `--profile tools`, listens on `127.0.0.1` only, runs as a non-root user, and has its own login. It won't start without `PGADMIN_PASSWORD`, so there's no default password. Never deploy it or expose port 5050. On a shared server, use `psql` over SSH instead.
