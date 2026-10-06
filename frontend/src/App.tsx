@@ -101,6 +101,7 @@ export default function App() {
           user={user}
           onEditInterests={() => setEditingInterests(true)}
           onLogout={handleLogout}
+          onSavedVideos={() => setShowSavedVideos(true)}
         />
       );
     }
