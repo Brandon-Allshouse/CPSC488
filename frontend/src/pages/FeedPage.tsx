@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { User } from '../api/auth';
 import { fetchFeed, type Video } from '../api/feed';
 import VideoCard from '../components/VideoCard';
+import {fetchSavedVideos, removeSavedVideo, saveVideo,} from '../api/savedVideos';
 
 interface Props {
   topicIds: number[];
@@ -20,6 +21,26 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if(!user) {
+      setSavedIds(new Set());
+      return;
+    }
+
+    fetchSavedVideos()
+    .then(saved) => }
+            setSavedIds(
+    new Set(saved.map((video) => video.youtubeId)),
+    );
+})
+.catch(() => {
+  // The feed still works even if saved videos fail to load.
+  setSavedIds(new Set());
+});
+}, [user]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -42,6 +63,38 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       setLoading(false);
     }
   }
+
+async function toggleSaved(video: Video) {
+  if (!user) return;
+
+  const currentlySaved = savedIds.has(video.youtubeId);
+
+  try {
+    if (currentlySaved) {
+      await removeSavedVideo(video.youtubeId);
+
+      setSavedIds((current) => {
+        const next = new Set(current);
+        next.delete(video.youtubeId);
+        return next;
+      });
+    } else {
+      await saveVideo(video.youtubeId);
+
+      setSavedIds((current) => {
+        const next = new Set(current);
+        next.add(video.youtubeId);
+        return next;
+      });
+    }
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Could not update saved videos.',
+    );
+  }
+}
 
   // Load the next page when the invisible marker under the last video comes within 600px.
   useEffect(() => {
@@ -77,7 +130,13 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
       <div ref={listRef} className="feed-list">
         {videos.map((video) => (
-          <VideoCard key={video.youtubeId} video={video} />
+          <VideoCard
+            key={video.youtubeId}
+            video={video}
+            canSave={user !== null}
+            saved={savedIds.has(video.youtubeId)}
+            onToggleSAved={togglesaved}
+            />
         ))}
 
         {isEmpty && (
