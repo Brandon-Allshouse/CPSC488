@@ -70,6 +70,30 @@ services:
     depends_on:
       - backend
 
+  # Optional database GUI in the browser: `docker compose --profile tools up -d pgadmin`, then open
+  # http://localhost:5050 (see "Looking at the database" in the README). The "tools" profile means
+  # it doesn't start with a plain `docker compose up`.
+  pgadmin:
+    image: dpage/pgadmin4:9
+    profiles: ["tools"]
+    environment:
+      # Its own login page, so other apps on this laptop can't open our database through it.
+      # pgAdmin refuses to start without a password, so set PGADMIN_PASSWORD in .env first.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@sru.edu}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-}
+      # Don't run the mail server that's built into the image; we don't send email.
+      PGADMIN_DISABLE_POSTFIX: "true"
+    volumes:
+      # Shows our database in the sidebar already set up. Only read the first time pgAdmin starts.
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      # Keeps your pgAdmin login and settings between restarts; `down -v` erases it.
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      # 127.0.0.1 only, same as the database: reachable from this laptop, not the network.
+      - "127.0.0.1:5050:80"
+    depends_on:
+      - db
+
   # Runs the backend unit tests: `docker compose run --rm backend-tests`
   # The "test" profile means it doesn't start with `docker compose up`.
   backend-tests:
@@ -89,3 +113,4 @@ volumes:
   brainfeed-pgdata:
   frontend-node-modules:
   maven-cache:
+  pgadmin-data:
