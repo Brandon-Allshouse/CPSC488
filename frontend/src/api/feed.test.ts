@@ -13,8 +13,12 @@ afterEach(() => {
 
 describe('feed api', () => {
   it('fetchTopics returns the topic list', async () => {
-    fakeFetch({ topics: [{ id: 1, name: 'Math' }] });
-    expect(await fetchTopics()).toEqual([{ id: 1, name: 'Math' }]);
+    const topics = [
+      { id: 1, name: 'Math', parentId: null },
+      { id: 2, name: 'Algebra 2', parentId: 1 },
+    ];
+    fakeFetch({ topics });
+    expect(await fetchTopics()).toEqual(topics);
   });
 
   it('fetchMyInterests returns the saved topic ids', async () => {

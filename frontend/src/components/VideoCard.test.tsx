@@ -56,6 +56,23 @@ describe('VideoCard', () => {
     expect(dislike.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('keeps a separate thumbs choice for each video', () => {
+    // the feed shows lots of cards at once, so liking one shouldn't touch the others
+    render(
+      <>
+        <VideoCard video={video} />
+        <VideoCard video={{ ...video, youtubeId: 'abcdefghijk', title: 'How Rocks Form' }} />
+      </>,
+    );
+    const [firstLike, secondLike] = screen.getAllByRole('button', { name: 'I liked this video' });
+
+    fireEvent.click(firstLike);
+    expect(firstLike.getAttribute('aria-pressed')).toBe('true');
+    expect(secondLike.getAttribute('aria-pressed')).toBe('false');
+    // each tooltip needs its own id so screen readers read the right one
+    expect(firstLike.getAttribute('aria-describedby')).not.toBe(secondLike.getAttribute('aria-describedby'));
+  });
+
   it('loads the privacy-enhanced YouTube player when play is pressed', () => {
     const { container } = render(<VideoCard video={video} />);
     fireEvent.click(screen.getByRole('button', { name: 'Play: How Plants Grow' }));
@@ -89,5 +106,12 @@ describe('VideoCard', () => {
     const { container } = render(<VideoCard video={{ ...video, title: '<b>not bold</b>' }} />);
     expect(screen.getByText('<b>not bold</b>')).toBeTruthy();
     expect(container.querySelector('b')).toBeNull();
+  });
+
+  it('shows channel names with HTML in them as plain text', () => {
+    // channel names come from YouTube too
+    const { container } = render(<VideoCard video={{ ...video, channelTitle: '<i>Test Channel</i>' }} />);
+    expect(screen.getByText('<i>Test Channel</i>')).toBeTruthy();
+    expect(container.querySelector('i')).toBeNull();
   });
 });
