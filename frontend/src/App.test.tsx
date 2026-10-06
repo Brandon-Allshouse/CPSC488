@@ -20,6 +20,11 @@ vi.mock('./api/feed', () => ({
   saveMyInterests: vi.fn(),
   fetchFeed: vi.fn(),
 }));
+vi.mock('./api/savedVideos', () => ({
+  fetchSavedVideos: vi.fn().mockResolvedValue([]),
+  saveVideo: vi.fn().mockResolvedValue(undefined),
+  removeSavedVideo: vi.fn().mockResolvedValue(undefined),
+}));
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
 
