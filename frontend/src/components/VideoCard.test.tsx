@@ -64,4 +64,40 @@ describe('VideoCard', () => {
     expect(screen.getByText('<b>not bold</b>')).toBeTruthy();
     expect(container.querySelector('b')).toBeNull();
   });
+
+  it('lets a logged-in user save a video', () => {
+  const onToggleSaved = vi.fn();
+
+  render(
+    <VideoCard
+      video={video}
+      canSave
+      saved={false}
+      onToggleSaved={onToggleSaved}
+    />,
+  );
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save' }),
+  );
+
+  expect(onToggleSaved).toHaveBeenCalledWith(video);
+ });
+
+  it('shows when a video is already saved', () => {
+  render(
+    <VideoCard
+      video={video}
+      canSave
+      saved
+      onToggleSaved={() => undefined}
+    />,
+  );
+
+  const button = screen.getByRole('button', {
+    name: 'Saved',
+  });
+
+  expect(button.getAttribute('aria-pressed')).toBe('true');
+});
 });
