@@ -378,6 +378,17 @@ username taken, `429` too many attempts. Every POST and PUT must send `Content-T
 | PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
 | GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage }`; `nextPage` is null at the end |
 
+## Saved Videos API
+
+| Method | Path                              | Body | Success response |
+|--------|-----------------------------------|------|------------------|
+| GET    | `/api/me/saved-videos`            | none | `200 { videos }` |
+| POST   | `/api/me/saved-videos/{youtubeId}`| none | `204` |
+| DELETE | `/api/me/saved-videos/{youtubeId}`| none | `204` |
+
+All saved-video endpoints require the user to be logged in.
+Saved videos are returned newest-first.
+
 The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
 A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
 feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
