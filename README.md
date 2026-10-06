@@ -9,6 +9,8 @@ Matthew Ryboth, Brody Scott, Brandon Allshouse, Madeline Foradori
 Most short-form video apps are built to keep you scrolling, not to teach you anything.
 This project is our attempt at flipping that: same familiar scrolling feed, but built
 around educational content instead of whatever an algorithm thinks will keep you hooked.
+Think Duolingo mixed with TikTok, for any subject: the quick, swipeable feed of TikTok, plus
+Duolingo's focus on actually learning and remembering things.
 
 Users pick a few topics they're interested in (programming, history, biology, whatever)
 and get a feed of videos that actually explain or teach something about those topics,
@@ -17,7 +19,7 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 ## Features
 
 - Sign up for an account, or just browse as a guest
-- Pick interests up front, change them whenever
+- Pick interests up front, change them whenever: a whole subject (Math) or just part of it (Algebra 2)
 - Scrollable feed of educational videos
 - Thumbs up / down on videos to improve what you're shown
 - Less content from creators/channels you've marked as not interesting
@@ -50,7 +52,8 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
   src/pages/                    LoginPage, InterestsPage, FeedPage
-  src/components/               VideoCard (one video in the feed)
+  src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box)
+  src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
 docker-compose.yml            runs the whole app locally: database, backend, frontend
@@ -354,9 +357,20 @@ empty. Each person gets their own free key:
    then save. That way a leaked key can't be used for any other Google service.
 5. Paste it after `YOUTUBE_API_KEY=` in `.env`, then `Ctrl+C` and `docker compose up` again.
 
-Within a minute of starting, the backend logs `Fetched N videos for topic ...` for each topic. The
-free quota is 10,000 units a day and each topic search costs 100, so the backend refreshes each
-topic at most once a day (about 1,000 units). Restarting doesn't fetch again.
+Within a minute of starting, the backend logs `Fetched N videos for topic ...`. The free quota is
+10,000 units a day and each topic search costs 100, and there are about 120 topics, so videos are
+fetched in two ways:
+
+- **When someone opens the feed for a topic that has never been searched**, it's searched right
+  away. The feed shows "Finding videos for these topics..." and checks again every few seconds
+  until they arrive, which usually takes under 10 seconds. At most 5 new topics are fetched per request.
+- **Every hour**, up to 3 topics that haven't been refreshed in a week are searched again, picked
+  topics first.
+
+Both share a budget of 80 searches (8,000 units) per 24 hours. The count comes from the database,
+so restarting doesn't reset it or fetch again. After a YouTube error (usually the quota or a bad
+key), new-topic fetching pauses for 15 minutes. If the budget is used up, the feed says there are
+no videos yet, and they get fetched the next day.
 
 ## Auth API
 
@@ -377,12 +391,20 @@ username taken, `429` too many attempts. Every POST and PUT must send `Content-T
 
 | Method | Path                | Body / query                       | Success response                                         |
 |--------|---------------------|------------------------------------|----------------------------------------------------------|
-| GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name }] }`                         |
+| GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name, parentId }] }`               |
 | GET    | `/api/me/interests` | none (login required)              | `200 { topicIds }`, empty if none picked yet             |
 | PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
-| GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage }`; `nextPage` is null at the end |
+| GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage, fetching }`; see below         |
+
+Topics come in two levels. A subject (Math) has `parentId: null`; a sub-subject (Algebra 2) has its
+subject's id. Asking for a subject's id in `/api/feed` or saving it as an interest includes all
+of its sub-subjects. The list comes back with subjects first (A to Z), then sub-subjects in the
+order they're usually learned. To add one, insert a row in a new migration (see
+`V4__subjects_and_subtopics.sql`).
 
 The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
+`nextPage` is null at the end. `fetching` is true when some of the topics have never been searched
+and that search is happening now, so ask for page 0 again in a few seconds.
 A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
 feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
 scrolling. Videos are served from our database (filled once a day per topic by `FeedRefresher`),
@@ -398,10 +420,15 @@ accounts, sessions, input handling or the database.**
 
 This is a class project, so scope is going to move around as we go. Rough direction:
 
-1. **Now:** basic feed + YouTube integration, accounts/guest mode, interest selection
-2. **Next:** interested/not-interested feedback loop actually affecting recommendations, creator downweighting
-3. **Later:** LLM-generated short summaries and quiz-style questions for videos/topics in your feed
-4. **Maybe:** TikTok/Instagram as additional content sources, if time allows
+1. **Done:** accounts/guest mode, interest selection, YouTube feed
+2. **Now:** subjects and sub-subjects (Math → Algebra 2) covering the major areas of learning
+3. **Next:** save thumbs up/down and use it in the feed (hide disliked videos, show less from disliked channels)
+4. **Then:** the Duolingo side: LLM-generated summaries and quiz questions after videos, then progress
+   tracking (streaks, reviewing missed questions)
+5. **Later:** web scraping for learning material beyond YouTube (sources to be decided)
+6. **Later:** an LLM creates subjects and sub-subjects, so any subject can be covered instead of
+   only the list in `V4__subjects_and_subtopics.sql`. That list becomes the starting catalog
+7. **Maybe:** TikTok/Instagram as additional content sources, if time allows
 
 Nothing above is locked in. It's just where things stand right now.
 
@@ -409,4 +436,11 @@ Nothing above is locked in. It's just where things stand right now.
 
 Accounts are in place: sign up, log in, log out, and guest mode, with the backend, database and
 security baseline set up. Users (and guests) pick interests and get a scrolling feed of short
-educational YouTube videos for those topics. Next up: thumbs up/down feeding back into the feed.
+educational YouTube videos for those topics. Topics are split into 20 subjects and about 100
+sub-subjects, so users can pick all of Math or just Algebra 2. Up/down buttons on the feed page
+scroll one video at a time.
+
+Each video also has thumbs up/down buttons and a "Video Summary" box, but for now they only appear
+on screen. The thumbs choice isn't saved and resets when the page reloads, and the summary box is
+empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
+to shape the feed.

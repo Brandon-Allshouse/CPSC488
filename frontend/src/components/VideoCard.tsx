@@ -14,6 +14,8 @@ interface Props {
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
 export default function VideoCard({ video }: Props) {
   const [playing, setPlaying] = useState(false);
+  // Thumbs up/down only lives on screen for now. It isn't sent to the backend, so it resets on
+  // reload. Pressing the same button again clears it.
   const [feedback, setFeedback] = useState<'liked' | 'disliked' | null>(null);
   const cardRef = useRef<HTMLElement>(null);
 
@@ -100,6 +102,7 @@ export default function VideoCard({ video }: Props) {
           </div>
         </div>
         <p className="muted">{video.channelTitle}</p>
+        {/* Placeholder heading. The summary text will come from the LLM summaries on the roadmap. */}
         <p className="video-summary-label">
           <strong>Video Summary</strong>
         </p>

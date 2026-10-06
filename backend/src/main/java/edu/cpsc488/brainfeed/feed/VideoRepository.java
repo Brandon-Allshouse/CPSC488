@@ -47,11 +47,13 @@ public class VideoRepository {
      * One page of the feed for the given topics, in a shuffled order. The same {@code seed} always
      * gives the same order, so the frontend keeps its seed while scrolling and pages never repeat
      * or skip videos. A new seed (e.g. on page reload) gives a new order.
+     *
+     * <p>A subject's id also brings in its sub-subjects' videos, so picking Math includes Algebra 2.
      */
     public List<Video> page(Collection<Integer> topicIds, long seed, int offset, int limit) {
         String sql = """
                 SELECT youtube_id, title, channel_title, topic_id, published_at FROM videos
-                WHERE topic_id = ANY (?)
+                WHERE topic_id IN (SELECT id FROM topics WHERE id = ANY (?) OR parent_id = ANY (?))
                 ORDER BY md5(youtube_id || ?), youtube_id
                 LIMIT ? OFFSET ?
                 """;
@@ -60,9 +62,10 @@ public class VideoRepository {
              PreparedStatement ps = conn.prepareStatement(sql)) {
             Array ids = conn.createArrayOf("integer", topicIds.toArray());
             ps.setArray(1, ids);
-            ps.setString(2, Long.toString(seed));
-            ps.setInt(3, limit);
-            ps.setInt(4, offset);
+            ps.setArray(2, ids);
+            ps.setString(3, Long.toString(seed));
+            ps.setInt(4, limit);
+            ps.setInt(5, offset);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     videos.add(new Video(

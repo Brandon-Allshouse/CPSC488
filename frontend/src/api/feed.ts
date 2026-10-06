@@ -3,10 +3,12 @@
 
 import { request } from './client';
 
-// Matches Topic.java on the backend.
+// Matches Topic.java on the backend. Subjects (Math) have parentId null; sub-subjects
+// (Algebra 2) have their subject's id. Picking a subject includes all of its sub-subjects.
 export interface Topic {
   id: number;
   name: string;
+  parentId: number | null;
 }
 
 // Matches Video.java. title and channelTitle come from YouTube: only ever render them as plain
@@ -23,6 +25,8 @@ export interface FeedPage {
   videos: Video[];
   /** null when there are no more videos. */
   nextPage: number | null;
+  /** True while videos for newly picked topics are still being found on YouTube. Check again soon. */
+  fetching: boolean;
 }
 
 export async function fetchTopics(): Promise<Topic[]> {
