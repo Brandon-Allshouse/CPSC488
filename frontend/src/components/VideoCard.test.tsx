@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Video } from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import VideoCard from './VideoCard';
@@ -26,8 +26,51 @@ describe('VideoCard', () => {
     const { container } = render(<VideoCard video={video} />);
     expect(screen.getByText('How Plants Grow')).toBeTruthy();
     expect(screen.getByText('Test Channel')).toBeTruthy();
+    const summaryBox = screen.getByRole('region', { name: 'Video summary' });
+    expect(summaryBox).toBeTruthy();
+    expect(screen.getByText('Video Summary').tagName).toBe('STRONG');
+    expect(summaryBox.textContent).not.toMatch(/unable to be rendered/i);
+    expect(summaryBox.textContent!.indexOf('Test Channel')).toBeLessThan(
+      summaryBox.textContent!.indexOf('Video Summary'),
+    );
     expect(container.querySelector('img')?.getAttribute('src')).toBe('https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg');
     expect(container.querySelector('iframe')).toBeNull();
+  });
+
+  it('shows separate feedback buttons with tooltips and toggleable pressed states', () => {
+    render(<VideoCard video={video} />);
+    const like = screen.getByRole('button', { name: 'I liked this video' });
+    const dislike = screen.getByRole('button', { name: "I didn't really like this video" });
+
+    expect(screen.getByRole('tooltip', { name: 'I liked this video' })).toBeTruthy();
+    expect(screen.getByRole('tooltip', { name: "I didn't really like this video" })).toBeTruthy();
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(dislike.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(like);
+    expect(like.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(dislike);
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(dislike.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(dislike);
+    expect(dislike.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps a separate thumbs choice for each video', () => {
+    // the feed shows lots of cards at once, so liking one shouldn't touch the others
+    render(
+      <>
+        <VideoCard video={video} />
+        <VideoCard video={{ ...video, youtubeId: 'abcdefghijk', title: 'How Rocks Form' }} />
+      </>,
+    );
+    const [firstLike, secondLike] = screen.getAllByRole('button', { name: 'I liked this video' });
+
+    fireEvent.click(firstLike);
+    expect(firstLike.getAttribute('aria-pressed')).toBe('true');
+    expect(secondLike.getAttribute('aria-pressed')).toBe('false');
+    // each tooltip needs its own id so screen readers read the right one
+    expect(firstLike.getAttribute('aria-describedby')).not.toBe(secondLike.getAttribute('aria-describedby'));
   });
 
   it('loads the privacy-enhanced YouTube player when play is pressed', () => {
@@ -100,4 +143,10 @@ describe('VideoCard', () => {
 
   expect(button.getAttribute('aria-pressed')).toBe('true');
 });
+  it('shows channel names with HTML in them as plain text', () => {
+    // channel names come from YouTube too
+    const { container } = render(<VideoCard video={{ ...video, channelTitle: '<i>Test Channel</i>' }} />);
+    expect(screen.getByText('<i>Test Channel</i>')).toBeTruthy();
+    expect(container.querySelector('i')).toBeNull();
+  });
 });

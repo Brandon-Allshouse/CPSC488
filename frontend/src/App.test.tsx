@@ -27,10 +27,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   useFakeIntersectionObserver();
   vi.mocked(fetchTopics).mockResolvedValue([
-    { id: 1, name: 'Math' },
-    { id: 2, name: 'History' },
+    { id: 1, name: 'Math', parentId: null },
+    { id: 2, name: 'History', parentId: null },
   ]);
-  vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null });
+  vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
   vi.mocked(logout).mockResolvedValue(undefined);
 });
 
@@ -65,7 +65,7 @@ describe('App', () => {
     vi.mocked(saveMyInterests).mockResolvedValue([2]);
     render(<App />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'All of History' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
 
     expect(await screen.findByText('testuser')).toBeTruthy();
@@ -77,7 +77,7 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Continue as guest' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Math' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'All of Math' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
 
     expect(await screen.findByText('Guest')).toBeTruthy();

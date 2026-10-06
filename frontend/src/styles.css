@@ -43,6 +43,26 @@ h1 {
   padding: 1.5rem 1rem;
 }
 
+.auth-logo,
+.feed-logo {
+  position: fixed;
+  z-index: 1;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  object-position: center;
+}
+
+.auth-logo {
+  top: 10px;
+  left: 10px;
+}
+
+.feed-logo {
+  right: 10px;
+  bottom: 10px;
+}
+
 .auth-card {
   width: 100%;
   max-width: 400px;
@@ -99,6 +119,29 @@ form {
 .password-row input {
   flex: 1;
   min-width: 0;
+}
+
+.password-toggle {
+  align-self: stretch;
+  padding: 0 0.7rem;
+  border: 1px solid #000;
+  border-radius: 4px;
+  background: #f3f3f3;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  color: #444;
+  font-family: inherit;
+  font-size: 1.6rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  background: #e8e8e8;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .field small {
@@ -193,6 +236,39 @@ form {
   max-width: 520px;
 }
 
+.subject-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 55vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.subject + .subject {
+  border-top: 1px solid var(--border);
+}
+
+.subject summary {
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subject summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.subject-count {
+  color: var(--accent);
+  font-weight: 400;
+}
+
+.subject .topic-grid {
+  padding: 0 1rem 1rem;
+}
+
 .topic-grid {
   display: flex;
   flex-wrap: wrap;
@@ -236,11 +312,59 @@ form {
   border-bottom: 1px solid var(--border);
 }
 
+.feed-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feed-brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  object-position: center;
+}
+
 .feed-actions {
   display: flex;
   align-items: center;
   gap: 1rem;
   font-size: 0.9rem;
+}
+
+.feed-scroll-controls {
+  position: fixed;
+  z-index: 2;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.feed-scroll-controls button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font: inherit;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.feed-scroll-controls button:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.feed-scroll-controls button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 
 /* Each video snaps to fill the screen, like other short-form video apps. */
@@ -255,18 +379,118 @@ form {
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.75rem;
   padding: 1rem;
 }
 
-.video-frame {
+.feed-list .video-frame {
   width: min(100%, 900px, calc((100dvh - 12rem) * 16 / 9));
   aspect-ratio: 16 / 9;
+  border: 1px solid #fff;
   border-radius: var(--radius);
   overflow: hidden;
   background: #000;
+}
+
+.feed-list .video-summary {
+  width: min(100%, 900px, calc((100dvh - 12rem) * 16 / 9));
+  padding: 1rem;
+  border: 1px solid #fff;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.video-summary-label {
+  margin: 0.75rem 0 0;
+}
+
+.video-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.video-title-row .video-title {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5rem;
+}
+
+.video-feedback {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.video-feedback-button {
+  position: relative;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0.15rem;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.video-feedback-button svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.video-feedback-like {
+  color: #43b75d;
+}
+
+.video-feedback-dislike {
+  color: #e35b5b;
+}
+
+/* VideoCard uses the thumbs-up icon for both buttons, so flip it here for thumbs down. */
+.video-feedback-dislike svg {
+  transform: rotate(180deg);
+}
+
+.video-feedback-button[aria-pressed='true'] {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.video-feedback-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.video-feedback-tooltip {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.2;
+  white-space: normal;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.video-feedback-button:hover .video-feedback-tooltip,
+.video-feedback-button:focus-visible .video-feedback-tooltip {
+  visibility: visible;
+  opacity: 1;
 }
 
 .video-frame iframe,
@@ -310,13 +534,12 @@ form {
 }
 
 .video-title {
-  width: min(100%, 900px);
-  margin: 0.5rem 0 0;
+  margin: 0 0 0.35rem;
   font-size: 1.1rem;
 }
 
-.video-card .muted {
-  width: min(100%, 900px);
+.video-summary .muted {
+  margin: 0;
 }
 
 .feed-message {

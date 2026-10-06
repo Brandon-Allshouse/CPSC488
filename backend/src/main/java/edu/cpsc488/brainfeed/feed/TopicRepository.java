@@ -23,13 +23,18 @@ public class TopicRepository {
         this.dataSource = dataSource;
     }
 
+    /** Subjects first, alphabetically, then sub-subjects in id order (the order they're learned in). */
     public List<Topic> listAll() {
+        String sql = """
+                SELECT id, name, parent_id FROM topics
+                ORDER BY parent_id IS NOT NULL, CASE WHEN parent_id IS NULL THEN name END, id
+                """;
         List<Topic> topics = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement("SELECT id, name FROM topics ORDER BY name");
+             PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                topics.add(new Topic(rs.getInt("id"), rs.getString("name")));
+                topics.add(new Topic(rs.getInt("id"), rs.getString("name"), rs.getObject("parent_id", Integer.class)));
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -83,12 +88,16 @@ public class TopicRepository {
         }
     }
 
-    /** Topics that have never been fetched, or not within {@code maxAge}. */
+    /**
+     * Topics that have never been fetched, or not within {@code maxAge}. Topics someone has picked
+     * come first, so a new pick gets videos within the hour instead of waiting its turn.
+     */
     List<SearchTopic> dueForRefresh(Duration maxAge) {
         String sql = """
-                SELECT id, search_query FROM topics
+                SELECT id, search_query FROM topics t
                 WHERE videos_fetched_at IS NULL OR videos_fetched_at < now() - make_interval(secs => ?)
-                ORDER BY videos_fetched_at NULLS FIRST
+                ORDER BY EXISTS (SELECT 1 FROM user_interests ui WHERE ui.topic_id = t.id) DESC,
+                         videos_fetched_at NULLS FIRST, id
                 """;
         List<SearchTopic> due = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
@@ -103,6 +112,37 @@ public class TopicRepository {
             throw new RuntimeException(e);
         }
         return due;
+    }
+
+    /** The ones among {@code topicIds} that have never been searched on YouTube. */
+    List<SearchTopic> neverFetched(Collection<Integer> topicIds) {
+        String sql = "SELECT id, search_query FROM topics WHERE id = ANY (?) AND videos_fetched_at IS NULL ORDER BY id";
+        List<SearchTopic> missing = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setArray(1, conn.createArrayOf("integer", topicIds.toArray()));
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    missing.add(new SearchTopic(rs.getInt("id"), rs.getString("search_query")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return missing;
+    }
+
+    /** How many topics were searched in the last 24 hours, which is how much quota we've used. */
+    int searchesInLastDay() {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT count(*) FROM topics WHERE videos_fetched_at > now() - interval '1 day'");
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     void markFetched(int topicId) {

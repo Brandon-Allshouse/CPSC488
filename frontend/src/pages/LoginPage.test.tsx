@@ -34,6 +34,10 @@ describe('LoginPage', () => {
     expect(screen.queryByLabelText('Username')).toBeNull();
   });
 
+  it('shows the brain logo in the top-left corner', () => {
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('auth-logo');
+  });
+
   it('logs in and passes the user up', async () => {
     vi.mocked(login).mockResolvedValue(testUser);
     type('Email', 'test@sru.edu');
@@ -125,11 +129,12 @@ describe('LoginPage', () => {
     expect(register).not.toHaveBeenCalled();
   });
 
-  it('show button reveals the password', () => {
+  it('SHOW button reveals the password', () => {
     const password = screen.getByLabelText('Password') as HTMLInputElement;
     expect(password.type).toBe('password');
-    fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SHOW' }));
     expect(password.type).toBe('text');
+    expect(screen.getByRole('button', { name: 'HIDE' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('continue as guest calls onGuest', () => {

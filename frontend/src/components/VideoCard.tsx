@@ -19,9 +19,12 @@ export default function VideoCard({
   video,
   saved = false,
   canSave = false,
-  onTogglesSaved,
+  onToggleSaved,
 }: Props) {
   const [playing, setPlaying] = useState(false);
+  // Thumbs up/down only lives on screen for now. It isn't sent to the backend, so it resets on
+  // reload. Pressing the same button again clears it.
+  const [feedback, setFeedback] = useState<'liked' | 'disliked' | null>(null);
   const cardRef = useRef<HTMLElement>(null);
 
   // Stop the video once it's mostly scrolled out of view, so it doesn't keep playing off-screen.
@@ -70,9 +73,52 @@ export default function VideoCard({
         )}
       </div>
       {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-      <h2 className="video-title">{video.title}</h2>
-      <p className="muted">{video.channelTitle}</p>
-      {canSave && onToggleSaved && (
+     
+      <section className="video-summary" aria-label="Video summary">
+        {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
+        <div className="video-title-row">
+          <h2 className="video-title">{video.title}</h2>
+          <div className="video-feedback">
+            <button
+              type="button"
+              className="video-feedback-button video-feedback-like"
+              aria-label="I liked this video"
+              aria-describedby={`like-tooltip-${id}`}
+              aria-pressed={feedback === 'liked'}
+              onClick={() => setFeedback((current) => (current === 'liked' ? null : 'liked'))}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M1 21h4V9H1v12zM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
+              </svg>
+              <span id={`like-tooltip-${id}`} className="video-feedback-tooltip" role="tooltip">
+                I liked this video
+              </span>
+            </button>
+            <button
+              type="button"
+              className="video-feedback-button video-feedback-dislike"
+              aria-label="I didn't really like this video"
+              aria-describedby={`dislike-tooltip-${id}`}
+              aria-pressed={feedback === 'disliked'}
+              onClick={() => setFeedback((current) => (current === 'disliked' ? null : 'disliked'))}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M1 21h4V9H1v12zM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
+              </svg>
+              <span id={`dislike-tooltip-${id}`} className="video-feedback-tooltip" role="tooltip">
+                I didn't really like this video
+              </span>
+            </button>
+          </div>
+        </div>
+        <p className="muted">{video.channelTitle}</p>
+        {/* Placeholder heading. The summary text will come from the LLM summaries on the roadmap. */}
+        <p className="video-summary-label">
+          <strong>Video Summary</strong>
+        </p>
+      </section>
+        
+         {canSave && onToggleSaved && (
       <div className="video-action">
       <button
         type="button"
@@ -83,6 +129,7 @@ export default function VideoCard({
         {saved ? 'Saved' : 'Save'}
       </button>
       </div>
+        )}
     </article>
   );
 }

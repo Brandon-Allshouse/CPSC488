@@ -12,6 +12,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Tests the input checks and paging in FeedController. The endpoints themselves need a database,
 // so they'll be covered by the API tests later.
@@ -94,25 +95,33 @@ class FeedControllerTest {
     @Test
     void fullPageHasANextPage() {
         // the database gets asked for 11 so we know there's more
-        FeedController.FeedPage page = FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE + 1), 0);
+        FeedController.FeedPage page = FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE + 1), 0, false);
         assertEquals(FeedController.PAGE_SIZE, page.videos().size());
         assertEquals(1, page.nextPage());
     }
 
     @Test
     void lastPageHasNoNextPage() {
-        FeedController.FeedPage page = FeedController.toPage(fakeVideos(5), 3);
+        FeedController.FeedPage page = FeedController.toPage(fakeVideos(5), 3, false);
         assertEquals(5, page.videos().size());
         assertNull(page.nextPage());
     }
 
     @Test
     void exactlyOnePageLeftHasNoNextPage() {
-        assertNull(FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE), 0).nextPage());
+        assertNull(FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE), 0, false).nextPage());
     }
 
     @Test
     void noNextPageAfterTheMaxPage() {
-        assertNull(FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE + 1), FeedController.MAX_PAGE).nextPage());
+        assertNull(FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE + 1), FeedController.MAX_PAGE, false).nextPage());
+    }
+
+    @Test
+    void emptyPageSaysWhenVideosAreStillBeingFetched() {
+        // the frontend uses this to show "finding videos" instead of "no videos"
+        FeedController.FeedPage page = FeedController.toPage(fakeVideos(0), 0, true);
+        assertTrue(page.videos().isEmpty());
+        assertTrue(page.fetching());
     }
 }

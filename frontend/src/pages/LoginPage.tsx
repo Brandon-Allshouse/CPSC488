@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { login, register, type User } from '../api/auth';
+import brainLogo from '../assets/brainfeed-logo.png';
 import {
   MAX_EMAIL,
   MIN_PASSWORD,
@@ -71,6 +72,7 @@ export default function LoginPage({ onAuthenticated, onGuest }: Props) {
 
   return (
     <main className="auth-page">
+      <img className="auth-logo" src={brainLogo} alt="BrainFeed brain logo" />
       <section className="auth-card" aria-labelledby="auth-title">
         <header className="auth-header">
           <p className="brand">BrainFeed</p>
@@ -126,12 +128,12 @@ export default function LoginPage({ onAuthenticated, onGuest }: Props) {
               />
               <button
                 type="button"
-                className="link-button"
+                className="password-toggle"
                 onClick={() => setShowPassword((s) => !s)}
                 aria-pressed={showPassword}
                 aria-controls="password"
               >
-                {showPassword ? 'Hide' : 'Show'}
+                {showPassword ? 'HIDE' : 'SHOW'}
               </button>
             </div>
             {isRegister && (

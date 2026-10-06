@@ -8,6 +8,7 @@ import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -19,8 +20,9 @@ import java.util.stream.Collectors;
  * Endpoints for topics, interests and the video feed. The request and response shapes are in the
  * README's "Feed API" table.
  *
- * <p>/api/topics and /api/feed are public so guests can use them. The feed only reads from our
- * database, so nobody can use it to burn through our YouTube quota.
+ * <p>/api/topics and /api/feed are public so guests can use them. Videos are served from our
+ * database. The only way the feed reaches YouTube is asking FeedRefresher to fetch topics that have
+ * never been searched, and that has a daily budget, so nobody can burn through our quota.
  *
  * <p>/api/me/interests needs a login and only touches the logged-in user's own interests. The
  * user comes from the session cookie, so there's no user id in the request to tamper with.
@@ -30,14 +32,23 @@ public class FeedController {
     static final int PAGE_SIZE = 10;
     // way more than anyone will scroll, and stops requests for page 1,000,000
     static final int MAX_PAGE = 100;
-    // there are only 10 topics, so anything past this is junk
-    static final int MAX_TOPICS_PER_REQUEST = 50;
+    // there are about 120 topics (subjects plus sub-subjects), so anything past this is junk
+    static final int MAX_TOPICS_PER_REQUEST = 200;
 
     record InterestsRequest(List<Integer> topicIds) {
     }
 
-    /** nextPage is null when there are no more videos. */
-    record FeedPage(List<Video> videos, Integer nextPage) {
+    /**
+     * nextPage is null when there are no more videos. fetching is true while videos for some of the
+     * picked topics are still being found on YouTube, so the frontend should check again soon.
+     */
+    record FeedPage(List<Video> videos, Integer nextPage, boolean fetching) {
+    }
+
+    /** Starts finding videos for topics that have none yet (see FeedRefresher). */
+    public interface MissingVideoFetcher {
+        /** Returns true if videos for some of these topics are being fetched right now. */
+        boolean fetchMissing(Collection<Integer> topicIds);
     }
 
     /** The parsed query string of GET /api/feed. */
@@ -47,11 +58,14 @@ public class FeedController {
     private final TopicRepository topics;
     private final VideoRepository videos;
     private final AuthController auth;
+    private final MissingVideoFetcher fetcher;
 
-    public FeedController(TopicRepository topics, VideoRepository videos, AuthController auth) {
+    public FeedController(TopicRepository topics, VideoRepository videos, AuthController auth,
+                          MissingVideoFetcher fetcher) {
         this.topics = topics;
         this.videos = videos;
         this.auth = auth;
+        this.fetcher = fetcher;
     }
 
     public void register(RoutesConfig routes) {
@@ -85,7 +99,9 @@ public class FeedController {
 
         // ask for one extra video so we know if there's another page after this one
         List<Video> found = videos.page(topicIds, query.seed(), query.page() * PAGE_SIZE, PAGE_SIZE + 1);
-        ctx.json(toPage(found, query.page()));
+        // only on the first page: that is where a new pick shows up, and scrolling shouldn't re-check
+        boolean fetching = query.page() == 0 && fetcher.fetchMissing(topicIds);
+        ctx.json(toPage(found, query.page(), fetching));
     }
 
     /** Reads the feed's query parameters. Throws a 400 if anything is missing or not a number. */
@@ -129,10 +145,10 @@ public class FeedController {
     }
 
     /** Cuts the extra lookahead video off and works out the next page number. */
-    static FeedPage toPage(List<Video> found, int page) {
+    static FeedPage toPage(List<Video> found, int page, boolean fetching) {
         boolean hasMore = found.size() > PAGE_SIZE && page < MAX_PAGE;
         List<Video> shown = found.subList(0, Math.min(found.size(), PAGE_SIZE));
-        return new FeedPage(shown, hasMore ? page + 1 : null);
+        return new FeedPage(shown, hasMore ? page + 1 : null, fetching);
     }
 
     private Set<Integer> validTopicIds() {

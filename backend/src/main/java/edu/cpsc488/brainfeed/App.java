@@ -88,11 +88,9 @@ public class App {
 
         TopicRepository topics = new TopicRepository(dataSource);
         VideoRepository videos = new VideoRepository(dataSource);
-        FeedController feed = new FeedController(topics, videos, auth);
 
-        SavedVideoController savedVideos = new SavedVideoRepository(datasourcer);
-        SavedVideoController savedVideoController =
-            new SavedVideoController(savedVideos, auth);
+        SavedVideoRepository savedVideos = new SavedVideoRepository(dataSource);
+        SavedVideoController savedVideoController = new SavedVideoController(savedVideos, auth);
         
         // Optional: without a key the app still runs, but no new videos are fetched.
         String youtubeKey = settings.get("YOUTUBE_API_KEY", null);
@@ -101,13 +99,18 @@ public class App {
             thread.setDaemon(true);
             return thread;
         });
+        FeedController.MissingVideoFetcher fetcher;
         if (youtubeKey == null) {
             log.warn("YOUTUBE_API_KEY is not set, so no videos will be fetched. See .env.example.");
+            fetcher = topicIds -> false;
         } else {
-            // Right away, then every hour. Each run only searches topics not refreshed in a day.
-            FeedRefresher refresher = new FeedRefresher(topics, videos, new YouTubeClient(youtubeKey));
+            // Right away, then every hour. Each run searches a few topics not refreshed in a week.
+            // New picks are fetched on demand on the same thread (see FeedRefresher).
+            FeedRefresher refresher = new FeedRefresher(topics, videos, new YouTubeClient(youtubeKey), scheduler);
             scheduler.scheduleWithFixedDelay(refresher, 0, 1, TimeUnit.HOURS);
+            fetcher = refresher;
         }
+        FeedController feed = new FeedController(topics, videos, auth, fetcher);
 
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
