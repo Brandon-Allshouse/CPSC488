@@ -101,6 +101,7 @@ describe('FeedPage', () => {
   vi.mocked(fetchFeed).mockResolvedValue({
     videos: [],
     nextPage: null,
+    fetching: false,
   });
 
   renderFeed();
