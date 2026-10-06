@@ -8,11 +8,19 @@ const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 
 interface Props {
   video: Video;
+  saved?: boolean;
+  canSave?: boolean;
+  onToggleSaved?: (video: Video) => void;
 }
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ video }: Props) {
+export default function VideoCard({ 
+  video,
+  saved = false,
+  canSave = false,
+  onToggleSaved,
+}: Props) {
   const [playing, setPlaying] = useState(false);
   // Thumbs up/down only lives on screen for now. It isn't sent to the backend, so it resets on
   // reload. Pressing the same button again clears it.
@@ -64,6 +72,8 @@ export default function VideoCard({ video }: Props) {
           </button>
         )}
       </div>
+      {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
+     
       <section className="video-summary" aria-label="Video summary">
         {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
         <div className="video-title-row">
@@ -107,6 +117,19 @@ export default function VideoCard({ video }: Props) {
           <strong>Video Summary</strong>
         </p>
       </section>
+        
+         {canSave && onToggleSaved && (
+      <div className="video-action">
+      <button
+        type="button"
+        className="btn btn-secondary save-button"
+        onClick={() => onToggleSaved(video)}
+        aria-pressed={saved}
+      >
+        {saved ? 'Saved' : 'Save'}
+      </button>
+      </div>
+        )}
     </article>
   );
 }

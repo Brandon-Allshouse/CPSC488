@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Video } from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import VideoCard from './VideoCard';
@@ -108,6 +108,41 @@ describe('VideoCard', () => {
     expect(container.querySelector('b')).toBeNull();
   });
 
+  it('lets a logged-in user save a video', () => {
+  const onToggleSaved = vi.fn();
+
+  render(
+    <VideoCard
+      video={video}
+      canSave
+      saved={false}
+      onToggleSaved={onToggleSaved}
+    />,
+  );
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save' }),
+  );
+
+  expect(onToggleSaved).toHaveBeenCalledWith(video);
+ });
+
+  it('shows when a video is already saved', () => {
+  render(
+    <VideoCard
+      video={video}
+      canSave
+      saved
+      onToggleSaved={() => undefined}
+    />,
+  );
+
+  const button = screen.getByRole('button', {
+    name: 'Saved',
+  });
+
+  expect(button.getAttribute('aria-pressed')).toBe('true');
+});
   it('shows channel names with HTML in them as plain text', () => {
     // channel names come from YouTube too
     const { container } = render(<VideoCard video={{ ...video, channelTitle: '<i>Test Channel</i>' }} />);

@@ -3,6 +3,7 @@ import type { User } from '../api/auth';
 import { fetchFeed, type Video } from '../api/feed';
 import brainLogo from '../assets/brainfeed-logo.png';
 import VideoCard from '../components/VideoCard';
+import {fetchSavedVideos, removeSavedVideo, saveVideo,} from '../api/savedVideos';
 
 // How long to keep checking for videos for brand-new topics: every 3 seconds, for up to a minute.
 const FINDING_CHECK_MS = 3000;
@@ -13,11 +14,12 @@ interface Props {
   user: User | null;
   onEditInterests: () => void;
   onLogout: () => void;
+  onSavedVideos: () => void;
 }
 
 // The scrolling video feed. Loads 10 videos at a time as the user nears the bottom.
 // App.tsx remounts this page when the interests change, which starts a fresh feed.
-export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: Props) {
+export default function FeedPage({ topicIds, user, onEditInterests, onLogout, onSavedVideos }: Props) {
   // A random seed per visit gives a new shuffle each time, but stays fixed while scrolling so
   // pages don't repeat videos.
   const [seed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
@@ -25,6 +27,26 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if(!user) {
+      setSavedIds(new Set());
+      return;
+    }
+
+    fetchSavedVideos()
+    .then((saved) => {
+            setSavedIds(
+    new Set(saved.map((video) => video.youtubeId)),
+    );
+})
+.catch(() => {
+  // The feed still works even if saved videos fail to load.
+  setSavedIds(new Set());
+});
+}, [user]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -72,6 +94,37 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     }
   }
 
+async function toggleSaved(video: Video) {
+  if (!user) return;
+
+  const currentlySaved = savedIds.has(video.youtubeId);
+
+  try {
+    if (currentlySaved) {
+      await removeSavedVideo(video.youtubeId);
+
+      setSavedIds((current) => {
+        const next = new Set(current);
+        next.delete(video.youtubeId);
+        return next;
+      });
+    } else {
+      await saveVideo(video.youtubeId);
+
+      setSavedIds((current) => {
+        const next = new Set(current);
+        next.add(video.youtubeId);
+        return next;
+      });
+    }
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Could not update saved videos.',
+    );
+  }
+}
   // Each video is as tall as the list, so scrolling by the list's height moves exactly one video.
   function scrollFeed(direction: -1 | 1) {
     const list = listRef.current;
@@ -107,6 +160,15 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
         </div>
         <div className="feed-actions">
           <span className="muted feed-user">{user ? user.username : 'Guest'}</span>
+          {user && (
+      <button
+    type="button"
+    className="link-button"
+    onClick={onSavedVideos}
+  >
+    Saved
+  </button>
+)}
           <button type="button" className="link-button" onClick={onEditInterests}>
             Interests
           </button>
@@ -127,7 +189,13 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
       <div ref={listRef} className="feed-list">
         {videos.map((video) => (
-          <VideoCard key={video.youtubeId} video={video} />
+          <VideoCard
+            key={video.youtubeId}
+            video={video}
+            canSave={user !== null}
+            saved={savedIds.has(video.youtubeId)}
+            onToggleSaved={toggleSaved}
+            />
         ))}
 
         {isEmpty && (

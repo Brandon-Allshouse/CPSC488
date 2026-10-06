@@ -5,7 +5,15 @@ import { fetchFeed, type Video } from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import FeedPage from './FeedPage';
 
+vi.mock('../api/savedVideos', () => ({
+  fetchSavedVideos: vi.fn().mockResolvedValue([]),
+  saveVideo: vi.fn().mockResolvedValue(undefined),
+  removeSavedVideo: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../api/feed', () => ({ fetchFeed: vi.fn() }));
+
+const onSavedVideos = vi.fn();
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
 
@@ -24,7 +32,7 @@ const onLogout = vi.fn();
 
 function renderFeed(user = testUser as typeof testUser | null) {
   const result = render(
-    <FeedPage topicIds={[1, 2]} user={user} onEditInterests={onEditInterests} onLogout={onLogout} />,
+    <FeedPage topicIds={[1, 2]} user={user} onEditInterests={onEditInterests} onLogout={onLogout} onSavedVideos={onSavedVideos}/>,
   );
   // the invisible marker at the bottom of the feed that triggers loading more
   const scrollToBottom = () => scrollInto(result.container.querySelector('.feed-sentinel')!);
@@ -88,6 +96,22 @@ describe('FeedPage', () => {
     expect(screen.getByText('Test video 2')).toBeTruthy();
     expect(fetchFeed).toHaveBeenCalledWith([1, 2], expect.any(Number), 0);
   });
+
+  it('opens saved videos for a logged-in user', () => {
+  vi.mocked(fetchFeed).mockResolvedValue({
+    videos: [],
+    nextPage: null,
+    fetching: false,
+  });
+
+  renderFeed();
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Saved' }),
+  );
+
+  expect(onSavedVideos).toHaveBeenCalled();
+});
 
   it('loads the next page when scrolling to the bottom, with the same seed', async () => {
     vi.mocked(fetchFeed)
