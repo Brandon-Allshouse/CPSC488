@@ -8,11 +8,19 @@ const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 
 interface Props {
   video: Video;
+  saved?: boolean;
+  canSave?: boolean;
+  onToggleSaved?: (video: Video) => void;
 }
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ video }: Props) {
+export default function VideoCard({ 
+  video,
+  saved = false,
+  canSave = false,
+  onTogglesSaved,
+}: Props) {
   const [playing, setPlaying] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
 
@@ -64,6 +72,17 @@ export default function VideoCard({ video }: Props) {
       {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
       <h2 className="video-title">{video.title}</h2>
       <p className="muted">{video.channelTitle}</p>
+      {canSave && onToggleSaved && (
+      <div className="video-action">
+      <button
+        type="button"
+        className="btn btn-secondary save-button"
+        onClick={() => onToggleSaved(video)}
+        aria-pressed={saved}
+      >
+        {saved ? 'Saved' : 'Save'}
+      </button>
+      </div>
     </article>
   );
 }
