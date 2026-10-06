@@ -9,11 +9,12 @@ interface Props {
   user: User | null;
   onEditInterests: () => void;
   onLogout: () => void;
+  onSavedVideos: () => void;
 }
 
 // The scrolling video feed. Loads 10 videos at a time as the user nears the bottom.
 // App.tsx remounts this page when the interests change, which starts a fresh feed.
-export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: Props) {
+export default function FeedPage({ topicIds, user, onEditInterests, onLogout, onSavedVideos }: Props) {
   // A random seed per visit gives a new shuffle each time, but stays fixed while scrolling so
   // pages don't repeat videos.
   const [seed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
@@ -119,6 +120,15 @@ async function toggleSaved(video: Video) {
         <p className="brand">BrainFeed</p>
         <div className="feed-actions">
           <span className="muted feed-user">{user ? user.username : 'Guest'}</span>
+          {user && (
+      <button
+    type="button"
+    className="link-button"
+    onClick={onSavedVideos}
+  >
+    Saved
+  </button>
+)}
           <button type="button" className="link-button" onClick={onEditInterests}>
             Interests
           </button>
