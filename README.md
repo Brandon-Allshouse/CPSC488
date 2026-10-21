@@ -435,6 +435,9 @@ username taken, `429` too many attempts. Every POST and PUT must send `Content-T
 | GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name, parentId }] }`               |
 | GET    | `/api/me/interests` | none (login required)              | `200 { topicIds }`, empty if none picked yet             |
 | PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
+| GET    | `/api/me/video-feedback` | none (login required)         | `200 { likedVideos, dislikedVideos }`                    |
+| PUT    | `/api/me/video-feedback/{youtubeId}` | `{ feedback: "liked" or "disliked" }` (login required) | `204`; saves the user's choice |
+| DELETE | `/api/me/video-feedback/{youtubeId}` | none (login required)          | `204`; clears the user's choice                          |
 | GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage, fetching }`; see below         |
 
 Topics come in two levels. A subject (Math) has `parentId: null`; a sub-subject (Algebra 2) has its
@@ -449,7 +452,9 @@ and that search is happening now, so ask for page 0 again in a few seconds.
 A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
 feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
 scrolling. Videos are served from our database (filled once a day per topic by `FeedRefresher`),
-so browsing never spends YouTube quota.
+so browsing never spends YouTube quota. Video feedback requires a signed-in account and is private
+to that account. The feedback endpoint returns saved videos as `{ youtubeId, title, creator }`;
+guests are asked to log in before voting.
 
 ## Security
 

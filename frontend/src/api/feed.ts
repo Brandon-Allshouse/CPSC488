@@ -29,6 +29,19 @@ export interface FeedPage {
   fetching: boolean;
 }
 
+export type VideoFeedback = 'liked' | 'disliked';
+
+export interface SavedVideo {
+  youtubeId: string;
+  title: string;
+  creator: string;
+}
+
+export interface MyVideoFeedback {
+  likedVideos: SavedVideo[];
+  dislikedVideos: SavedVideo[];
+}
+
 export async function fetchTopics(): Promise<Topic[]> {
   const { topics } = await request<{ topics: Topic[] }>('/api/topics');
   return topics;
@@ -55,4 +68,22 @@ export async function saveMyInterests(topicIds: number[]): Promise<number[]> {
 export async function fetchFeed(topicIds: number[], seed: number, page: number): Promise<FeedPage> {
   const params = new URLSearchParams({ topics: topicIds.join(','), seed: String(seed), page: String(page) });
   return request<FeedPage>(`/api/feed?${params}`);
+}
+
+/** The signed-in user's private liked and disliked videos. */
+export async function fetchMyVideoFeedback(): Promise<MyVideoFeedback> {
+  return request<MyVideoFeedback>('/api/me/video-feedback');
+}
+
+/** Saves a vote, or clears it when feedback is null. */
+export async function saveMyVideoFeedback(youtubeId: string, feedback: VideoFeedback | null): Promise<void> {
+  const path = `/api/me/video-feedback/${encodeURIComponent(youtubeId)}`;
+  if (feedback === null) {
+    await request<void>(path, { method: 'DELETE' });
+  } else {
+    await request<void>(path, {
+      method: 'PUT',
+      body: JSON.stringify({ feedback }),
+    });
+  }
 }

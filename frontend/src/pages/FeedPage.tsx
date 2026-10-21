@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '../api/auth';
-import { fetchFeed, type Video } from '../api/feed';
+import { ApiError } from '../api/client';
+import {
+  fetchFeed,
+  fetchMyVideoFeedback,
+  saveMyVideoFeedback,
+  type Video,
+  type VideoFeedback,
+} from '../api/feed';
 import brainLogo from '../assets/brainfeed-logo.png';
+import FeedHeader from '../components/FeedHeader';
 import VideoCard from '../components/VideoCard';
+import LeaderboardPage from './LeaderboardPage';
+import LikedVideosPage from './LikedVideosPage';
 
 // How long to keep checking for videos for brand-new topics: every 3 seconds, for up to a minute.
 const FINDING_CHECK_MS = 3000;
@@ -25,6 +35,11 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
+  const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [showLikedVideos, setShowLikedVideos] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -40,6 +55,76 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   // Don't keep checking after the user leaves the feed.
   useEffect(() => () => clearTimeout(findingTimer.current), []);
+
+  useEffect(() => {
+    if (!user) {
+      setFeedbackByVideo({});
+      feedbackChanges.current = {};
+      return;
+    }
+
+    let cancelled = false;
+    fetchMyVideoFeedback()
+      .then((saved) => {
+        if (!cancelled) {
+          const feedback: Record<string, VideoFeedback> = {};
+          saved.likedVideos.forEach((video) => {
+            feedback[video.youtubeId] = 'liked';
+          });
+          saved.dislikedVideos.forEach((video) => {
+            feedback[video.youtubeId] = 'disliked';
+          });
+          Object.entries(feedbackChanges.current).forEach(([youtubeId, choice]) => {
+            if (choice === null) {
+              delete feedback[youtubeId];
+            } else {
+              feedback[youtubeId] = choice;
+            }
+          });
+          setFeedbackByVideo(feedback);
+          setFeedbackError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          if (err instanceof ApiError && err.status === 401) {
+            onLogout();
+          } else {
+            setFeedbackError(err instanceof Error ? err.message : 'Could not load saved video feedback.');
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  async function changeVideoFeedback(youtubeId: string, feedback: VideoFeedback | null) {
+    if (!user) {
+      onLogout();
+      return;
+    }
+    setFeedbackError(null);
+    try {
+      await saveMyVideoFeedback(youtubeId, feedback);
+      feedbackChanges.current[youtubeId] = feedback;
+      setFeedbackByVideo((current) => {
+        const next = { ...current };
+        if (feedback === null) {
+          delete next[youtubeId];
+        } else {
+          next[youtubeId] = feedback;
+        }
+        return next;
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onLogout();
+      } else {
+        setFeedbackError(err instanceof Error ? err.message : 'Could not save video feedback.');
+      }
+    }
+  }
 
   async function loadPage(page: number) {
     if (loadingRef.current || page !== nextPageRef.current) return;
@@ -97,24 +182,57 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   const isEmpty = videos.length === 0 && nextPage === null && !loading && !error && !finding;
 
+  const showFeed = () => {
+    setShowLeaderboard(false);
+    setShowLikedVideos(false);
+  };
+
+  const showLeaderboardPage = () => {
+    setShowLikedVideos(false);
+    setShowLeaderboard(true);
+  };
+
+  const showLikedVideosPage = () => {
+    setShowLeaderboard(false);
+    setShowLikedVideos(true);
+  };
+
+  if (showLikedVideos) {
+    return (
+      <LikedVideosPage
+        user={user}
+        onBack={showFeed}
+        onEditInterests={onEditInterests}
+        onShowLikedVideos={showLikedVideosPage}
+        onShowLeaderboard={showLeaderboardPage}
+        onLogout={onLogout}
+      />
+    );
+  }
+
+  if (showLeaderboard) {
+    return (
+      <LeaderboardPage
+        user={user}
+        onBack={showFeed}
+        onEditInterests={onEditInterests}
+        onShowLikedVideos={showLikedVideosPage}
+        onShowLeaderboard={showLeaderboardPage}
+        onLogout={onLogout}
+      />
+    );
+  }
+
   return (
     <div className="feed-page">
       <img className="feed-logo" src={brainLogo} alt="BrainFeed brain logo" />
-      <header className="feed-header">
-        <div className="feed-brand">
-          <img className="feed-brand-logo" src={brainLogo} alt="" />
-          <p className="brand">BrainFeed</p>
-        </div>
-        <div className="feed-actions">
-          <span className="muted feed-user">{user ? user.username : 'Guest'}</span>
-          <button type="button" className="link-button" onClick={onEditInterests}>
-            Interests
-          </button>
-          <button type="button" className="link-button" onClick={onLogout}>
-            {user ? 'Log out' : 'Log in'}
-          </button>
-        </div>
-      </header>
+      <FeedHeader
+        user={user}
+        onEditInterests={onEditInterests}
+        onShowLikedVideos={showLikedVideosPage}
+        onShowLeaderboard={showLeaderboardPage}
+        onLogout={onLogout}
+      />
 
       <nav className="feed-scroll-controls" aria-label="Feed navigation">
         <button type="button" aria-label="Scroll up" onClick={() => scrollFeed(-1)}>
@@ -126,8 +244,18 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       </nav>
 
       <div ref={listRef} className="feed-list">
+        {feedbackError && (
+          <p className="feed-message form-error" role="alert">
+            {feedbackError}
+          </p>
+        )}
         {videos.map((video) => (
-          <VideoCard key={video.youtubeId} video={video} />
+          <VideoCard
+            key={video.youtubeId}
+            video={video}
+            feedback={feedbackByVideo[video.youtubeId] ?? null}
+            onFeedbackChange={changeVideoFeedback}
+          />
         ))}
 
         {isEmpty && (

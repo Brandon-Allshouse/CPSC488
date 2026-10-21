@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchFeed, fetchMyInterests, fetchTopics, saveMyInterests } from './feed';
+import {
+  fetchFeed,
+  fetchMyInterests,
+  fetchMyVideoFeedback,
+  fetchTopics,
+  saveMyInterests,
+  saveMyVideoFeedback,
+} from './feed';
 
 function fakeFetch(body: unknown) {
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
@@ -40,5 +47,30 @@ describe('feed api', () => {
     const fetchMock = fakeFetch({ videos: [], nextPage: null });
     expect(await fetchFeed([1, 2], 42, 3)).toEqual({ videos: [], nextPage: null });
     expect(fetchMock.mock.calls[0][0]).toBe('/api/feed?topics=1%2C2&seed=42&page=3');
+  });
+
+  it('fetchMyVideoFeedback returns the signed-in user video lists', async () => {
+    const feedback = {
+      likedVideos: [{ youtubeId: 'dQw4w9WgXcQ', title: 'Title', creator: 'Creator' }],
+      dislikedVideos: [],
+    };
+    const fetchMock = fakeFetch(feedback);
+    expect(await fetchMyVideoFeedback()).toEqual(feedback);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/me/video-feedback');
+  });
+
+  it('saves a feedback choice and deletes it when cleared', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await saveMyVideoFeedback('dQw4w9WgXcQ', 'liked');
+    await saveMyVideoFeedback('dQw4w9WgXcQ', null);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/me/video-feedback/dQw4w9WgXcQ');
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ feedback: 'liked' });
+    expect(fetchMock.mock.calls[1][1].method).toBe('DELETE');
   });
 });
