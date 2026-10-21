@@ -24,8 +24,9 @@ import java.util.stream.Collectors;
  * database. The only way the feed reaches YouTube is asking FeedRefresher to fetch topics that have
  * never been searched, and that has a daily budget, so nobody can burn through our quota.
  *
- * <p>/api/me/interests needs a login and only touches the logged-in user's own interests. The
- * user comes from the session cookie, so there's no user id in the request to tamper with.
+ * <p>/api/me/interests and /api/me/video-feedback need a login and only touch the logged-in user's
+ * own rows. The user comes from the session cookie, so there's no user id in the request to tamper
+ * with.
  */
 public class FeedController {
 
@@ -191,7 +192,7 @@ public class FeedController {
     }
 
     static String checkYoutubeId(String youtubeId) {
-        if (youtubeId == null || !youtubeId.matches("[A-Za-z0-9_-]{11}")) {
+        if (youtubeId == null || !YouTubeClient.VIDEO_ID.matcher(youtubeId).matches()) {
             throw ApiException.badRequest("Invalid video id.");
         }
         return youtubeId;
