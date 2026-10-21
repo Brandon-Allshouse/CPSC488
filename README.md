@@ -21,7 +21,8 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Sign up for an account, or just browse as a guest
 - Pick interests up front, change them whenever: a whole subject (Math) or just part of it (Algebra 2)
 - Scrollable feed of educational videos
-- Thumbs up / down on videos to improve what you're shown
+- Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
+  videos where clicking a title takes you back to that video in your feed
 - Less content from creators/channels you've marked as not interesting
 - Preferences and history saved for registered users
 - A random/discovery feed to branch out into new topics
@@ -30,7 +31,7 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 ## Stack (subject to change)
 
 - **Backend:** Java 25, using Javalin 7, built with Maven, tested with JUnit
-- **Frontend:** React 19 + TypeScript, built with Vite (Node 24), tested with Vitest
+- **Frontend:** React 19 + TypeScript, built with Vite (Node 24), styled with Tailwind CSS 4 and shadcn/ui components, tested with Vitest
 - **Database:** PostgreSQL 18. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
 - **Local development:** Docker Compose runs all of the above, so the only tools you need are Docker Desktop and Git
 - **External services:** YouTube Data API, plus an LLM API for content classification (and later, generation)
@@ -56,8 +57,10 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
   src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, LeaderboardPage (placeholder), AdminPage
-  src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box),
-                                FeedHeader (logo and profile menu shared by the feed screens)
+  src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
+  src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
+  src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu)
+  src/index.css                 color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
@@ -227,6 +230,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Docker Desktop: "Virtualization support not detected" | Virtualization is turned off in your laptop's BIOS/UEFI settings. Search your laptop model + "enable virtualization". |
 | `env file ...\.env not found` or `Set DB_PASSWORD in .env` | `.env` is missing or misnamed. It must be in the `CPSC488` folder and named exactly `.env`. Check with `Get-ChildItem -Force .env`; Notepad sometimes saves it as `.env.txt`. |
 | Node reports `Unknown file extension ".tsx"` when you run a frontend test | Don't launch the test file with `node`. Run it through Vitest instead: `docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx` (the app must be running). |
+| `Cross-site request blocked.` when logging in or signing up | The address in your browser isn't in `ALLOWED_ORIGINS` (in `.env`). Open exactly **http://localhost:5173**; `127.0.0.1:5173` counts as a different site. To see what was blocked, run `docker compose logs backend` and look for `event=cross_site_write`. If you really need another address, add it to `ALLOWED_ORIGINS` (comma-separated) and run `docker compose up -d backend`. |
 | pgAdmin: `failed to resolve host 'db'` (or the backend can't reach `db`) after pulling | Your containers are still on the old shared network from before the database got its own. Run `docker compose up -d` (and `docker compose --profile tools up -d pgadmin` if you use pgAdmin) to recreate them on the new networks. Your data and pgAdmin settings are kept. |
 | Backend: `DB_PASSWORD is not set` or `PASSWORD_PEPPER ...` | That value in `.env` is blank or invalid. Generate one as in step 1. |
 | Backend: `password authentication failed for user "..."` | `DB_PASSWORD` changed after the database was created. Reset the local database: `docker compose down -v`, then `docker compose up --build`. This erases local data. |
@@ -273,6 +277,79 @@ Common native-setup problems:
 - Maven says `JAVA_HOME` is not defined correctly: run
   `[Environment]::SetEnvironmentVariable('JAVA_HOME', (Split-Path (Split-Path (Get-Command java).Source)), 'User')`,
   then reopen PowerShell.
+
+## Frontend
+
+The UI is built from [shadcn/ui](https://ui.shadcn.com) components styled with
+[Tailwind CSS](https://tailwindcss.com). shadcn/ui isn't a library you install: its components are
+short source files you copy into `src/components/ui/` and own. Colors come from the variables at the
+top of `src/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
+color there changes it everywhere. Icons come from [lucide-react](https://lucide.dev).
+
+### Getting around
+
+- **The BrainFeed logo and name** (top left, on every signed-in page) go back to the feed. On the
+  feed itself they scroll back to the first video.
+- **A title on "Your videos"** (Profile → Liked videos) opens that video in the feed. If it's
+  already loaded, the feed scrolls to it; if not, it's added at the top. Either way it's outlined
+  for a few seconds, and scrolling carries on from there. A video is never shown twice.
+- **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
+  Escape or a click outside it.
+
+### Adding a page
+
+Every signed-in page uses the same template, `PageLayout`. It draws the header and Profile menu,
+the title and "Back to feed", so a new page only contains its own content:
+
+```tsx
+import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+export default function QuizPage(navigation: PageNavigation) {
+  return (
+    <PageLayout {...navigation} name="quiz" title="Quiz" description="Test what you just watched.">
+      <Card>
+        <CardHeader>
+          <CardTitle>Question 1</CardTitle>
+        </CardHeader>
+        <CardContent>...</CardContent>
+      </Card>
+    </PageLayout>
+  );
+}
+```
+
+The BrainFeed logo on the new page goes back to the feed automatically. Then, in `FeedPage.tsx`,
+add `'quiz'` to the `view` type, add an `onShowQuiz` entry to
+`navigation`, render `<QuizPage {...navigation} />` when it's selected, and add a menu item in
+`FeedHeader.tsx`. Full-screen steps before the feed (like login) use `AuthLayout` instead.
+
+### Adding a shadcn/ui component
+
+Copy the component's code from ui.shadcn.com (the "Manual" install tab) into
+`src/components/ui/`. Imports like `@/lib/utils` already work. Two rules:
+
+- **Avoid components that pop up or position themselves** (Dropdown Menu, Popover, Tooltip,
+  Select, Dialog) unless you really need one. They use Radix, which positions things with inline
+  styles and is hard to test. Our menus use a styled `<details>` element instead (see
+  `FeedHeader.tsx`).
+- **New npm packages need a check first:** run `npm audit`, and don't install a version released in
+  the last two weeks. Brand-new releases are where supply-chain attacks hide.
+
+### Course requirements checklist
+
+| Requirement | Where |
+|---|---|
+| Classes and ids | Tailwind classes everywhere, plus named classes used as hooks (`feed-list`, `video-card`, `auth-backdrop`, ...). Ids on every page (`login-page`, `feed-page`, `admin-page`, ...), on form fields (`email`, `password`), and on headings that label sections |
+| `display: flex` | Tailwind's `flex` class, used across the app (`FeedHeader.tsx`, `PageLayout.tsx`, `VideoCard.tsx`, ...) |
+| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
+| 2+ font properties changed | `index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
+| 2+ box model properties changed | `margin` on `body` in `index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
+| Unobtrusive JavaScript | `index.html` has no inline scripts or `on...=` attributes. All behavior is attached from TypeScript modules, and the production Content-Security-Policy blocks inline scripts and handlers anyway |
+| 10+ functions | 80+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
+| 20+ event listeners | 40+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu with Escape; a `pointerdown` listener for closing it by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+
+TypeScript counts as JavaScript here; it compiles to plain JavaScript.
 
 ## Contributing
 

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Video, VideoFeedback } from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
-import VideoCard from './VideoCard';
+import VideoCard, { videoCardId } from './VideoCard';
 
 const video: Video = {
   youtubeId: 'dQw4w9WgXcQ',
@@ -133,5 +133,26 @@ describe('VideoCard', () => {
     const { container } = renderVideoCard({ ...video, channelTitle: '<i>Test Channel</i>' });
     expect(screen.getByText('<i>Test Channel</i>')).toBeTruthy();
     expect(container.querySelector('i')).toBeNull();
+  });
+
+  it('gives each card an id made from its video id, so the feed can scroll to it', () => {
+    const { container } = renderVideoCard();
+    expect(container.querySelector('article')!.id).toBe('video-dQw4w9WgXcQ');
+    expect(videoCardId('dQw4w9WgXcQ')).toBe('video-dQw4w9WgXcQ');
+  });
+
+  it('encodes anything unusual in the id', () => {
+    // the backend only stores real YouTube ids, so this is a second safeguard
+    expect(videoCardId('a"b c')).toBe('video-a%22b%20c');
+  });
+
+  it('outlines the card only while highlighted', () => {
+    const { container, rerender } = renderVideoCard();
+    const article = container.querySelector('article')!;
+    expect(article.hasAttribute('data-highlighted')).toBe(false);
+
+    rerender(<VideoCard video={video} feedback={null} onFeedbackChange={onFeedbackChange} highlighted />);
+    expect(article.getAttribute('data-highlighted')).toBe('true');
+    expect(container.querySelector('.video-frame')!.classList.contains('ring-primary')).toBe(true);
   });
 });

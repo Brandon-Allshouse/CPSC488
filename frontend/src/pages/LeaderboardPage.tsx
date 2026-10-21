@@ -1,49 +1,37 @@
-import type { User } from '../api/auth';
-import FeedHeader from '../components/FeedHeader';
+import { RefreshCw, Trophy } from 'lucide-react';
+import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
-interface Props {
-  user: User | null;
-  onBack: () => void;
-  onEditInterests: () => void;
-  onShowLikedVideos: () => void;
-  onShowLeaderboard: () => void;
-  onShowAdmin?: () => void;
-  onLogout: () => void;
-}
-
-export default function LeaderboardPage({
-  user,
-  onBack,
-  onEditInterests,
-  onShowLikedVideos,
-  onShowLeaderboard,
-  onShowAdmin,
-  onLogout,
-}: Props) {
+// Placeholder until scores exist (see the Roadmap in the README). The button is disabled so it
+// doesn't look like it did something.
+export default function LeaderboardPage(navigation: PageNavigation) {
   return (
-    <>
-      <FeedHeader
-        user={user}
-        onEditInterests={onEditInterests}
-        onShowLikedVideos={onShowLikedVideos}
-        onShowLeaderboard={onShowLeaderboard}
-        onShowAdmin={onShowAdmin}
-        onLogout={onLogout}
-      />
-      <main className="leaderboard-page">
-        <header className="leaderboard-header">
-          <h1>Leaderboard</h1>
-          <button type="button" className="link-button" onClick={onBack}>
-            Back to feed
-          </button>
-        </header>
-        <section className="leaderboard-panel" aria-label="Leaderboard information" />
-        <div className="leaderboard-actions">
-          <button type="button" className="btn btn-primary">
-            Update leaderboard
-          </button>
-        </div>
-      </main>
-    </>
+    <PageLayout
+      {...navigation}
+      name="leaderboard"
+      title="Leaderboard"
+      description="See who's learning the most."
+      actions={
+        <Button size="sm" disabled title="Coming soon">
+          <RefreshCw aria-hidden="true" />
+          Update leaderboard
+        </Button>
+      }
+    >
+      <Card
+        role="region"
+        aria-label="Leaderboard information"
+        className="leaderboard-panel min-h-[50dvh] items-center justify-center gap-3 text-center"
+      >
+        <span className="flex size-14 items-center justify-center rounded-full bg-primary/15 text-primary">
+          <Trophy aria-hidden="true" className="size-7" />
+        </span>
+        <p className="font-medium">No rankings yet</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Rankings will show up here once quizzes and progress tracking are added.
+        </p>
+      </Card>
+    </PageLayout>
   );
 }

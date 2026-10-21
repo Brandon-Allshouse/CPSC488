@@ -14,6 +14,7 @@ const handlers = {
   onShowLikedVideos: vi.fn(),
   onShowLeaderboard: vi.fn(),
   onLogout: vi.fn(),
+  onOpenVideo: vi.fn(),
 };
 
 function renderPage(user = testUser as typeof testUser | null) {
@@ -102,5 +103,35 @@ describe('LikedVideosPage', () => {
     fireEvent.click(screen.getByText('Profile'));
     fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
     expect(onShowAdmin).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a liked or disliked video in the feed when its title is clicked', async () => {
+    const liked = { youtubeId: 'video000001', title: 'Liked title', creator: 'Liked creator' };
+    const disliked = { youtubeId: 'video000002', title: 'Disliked title', creator: 'Disliked creator' };
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [liked], dislikedVideos: [disliked] });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Liked title' }));
+    expect(handlers.onOpenVideo).toHaveBeenLastCalledWith(liked);
+    fireEvent.click(screen.getByRole('button', { name: 'Disliked title' }));
+    expect(handlers.onOpenVideo).toHaveBeenLastCalledWith(disliked);
+  });
+
+  it("doesn't make the creator clickable", async () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000001', title: 'Liked title', creator: 'Liked creator' }],
+      dislikedVideos: [],
+    });
+    renderPage();
+    await screen.findByRole('button', { name: 'Liked title' });
+    expect(screen.queryByRole('button', { name: 'Liked creator' })).toBeNull();
+  });
+
+  it('goes to the feed from the BrainFeed logo', async () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
+    renderPage();
+    fireEvent.click(screen.getByRole('button', { name: 'BrainFeed, go to your feed' }));
+    expect(handlers.onBack).toHaveBeenCalledTimes(1);
+    await screen.findByText('No liked videos yet.');
   });
 });

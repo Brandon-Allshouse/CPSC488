@@ -21,6 +21,12 @@ export interface Video {
   publishedAt: string;
 }
 
+/**
+ * The parts of a video the feed shows. A liked video opened from "Your videos" only has these,
+ * since it may not be in the feed pages loaded so far.
+ */
+export type FeedVideo = Pick<Video, 'youtubeId' | 'title' | 'channelTitle'>;
+
 export interface FeedPage {
   videos: Video[];
   /** null when there are no more videos. */

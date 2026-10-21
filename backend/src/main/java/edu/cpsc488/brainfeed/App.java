@@ -11,6 +11,7 @@ import edu.cpsc488.brainfeed.auth.AuthController;
 import edu.cpsc488.brainfeed.auth.BreachedPasswordChecker;
 import edu.cpsc488.brainfeed.auth.PasswordHasher;
 import edu.cpsc488.brainfeed.auth.PasswordPolicy;
+import edu.cpsc488.brainfeed.auth.SecurityLog;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.Database;
@@ -197,6 +198,9 @@ public class App {
         }
         String origin = ctx.header("Origin");
         if (origin != null && !allowedOrigins.contains(origin)) {
+            // Logged with the origin, which is either an attack or a misconfigured ALLOWED_ORIGINS
+            // (e.g. opening the site as 127.0.0.1 instead of localhost). SecurityLog cleans the value.
+            SecurityLog.failure("cross_site_write", ctx, null, "origin " + origin + " not in ALLOWED_ORIGINS");
             throw ApiException.forbidden("Cross-site request blocked.");
         }
     }

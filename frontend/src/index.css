@@ -1,0 +1,156 @@
+/*
+ * The whole app's styles. Almost everything is Tailwind utility classes in the components; this file
+ * only holds the color theme, a few base rules, and the animations.
+ *
+ * Colors follow the shadcn/ui naming (background, card, primary, muted, ...), so components copied
+ * from ui.shadcn.com pick up our theme without changes. To restyle the app, change the variables
+ * in :root, not the components.
+ */
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --animate-fade-in-up: fade-in-up 0.35s ease-out both;
+  --animate-pop: pop 0.25s ease-out;
+}
+
+/* Dark theme only, matching the video-first look of the feed. */
+:root {
+  color-scheme: dark;
+  --radius: 0.75rem;
+  --background: oklch(0.16 0.01 265);
+  --foreground: oklch(0.96 0.005 265);
+  --card: oklch(0.205 0.012 265);
+  --card-foreground: oklch(0.96 0.005 265);
+  --popover: oklch(0.22 0.012 265);
+  --popover-foreground: oklch(0.96 0.005 265);
+  --primary: oklch(0.64 0.18 262);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.27 0.014 265);
+  --secondary-foreground: oklch(0.96 0.005 265);
+  --muted: oklch(0.27 0.014 265);
+  --muted-foreground: oklch(0.72 0.015 265);
+  --accent: oklch(0.3 0.02 265);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.66 0.2 22);
+  --success: oklch(0.74 0.15 155);
+  --border: oklch(0.32 0.014 265);
+  --input: oklch(0.34 0.014 265);
+  --ring: oklch(0.64 0.18 262);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Hide the default triangle on <details> menus; we draw our own chevron. */
+  summary {
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/* Pages and cards slide up slightly as they appear. */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A quick bounce when a thumbs up/down is pressed. */
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Soft blue glow behind the login and interests cards. */
+.auth-backdrop {
+  background: radial-gradient(ellipse at top, color-mix(in oklab, var(--primary) 22%, transparent), transparent 60%);
+}
+
+/* Each video fills the feed's height and snaps into place, like other short-video apps. */
+.feed-list {
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
+}
+
+.video-card {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* People who turn off motion in their OS settings get no animations or smooth scrolling. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

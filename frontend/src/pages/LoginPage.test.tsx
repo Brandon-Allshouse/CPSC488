@@ -35,7 +35,7 @@ describe('LoginPage', () => {
   });
 
   it('shows the brain logo in the top-left corner', () => {
-    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('auth-logo');
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('auth-logo')).toBe(true);
   });
 
   it('logs in and passes the user up', async () => {
