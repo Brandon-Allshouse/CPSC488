@@ -14,6 +14,8 @@ interface Props {
   onFeedbackChange: (youtubeId: string, feedback: VideoFeedback | null) => Promise<void>;
   /** Outlines the card, to show which video was just opened from "Your videos". */
   highlighted?: boolean;
+  /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
+  onPlay?: (youtubeId: string) => void;
 }
 
 /** The card's element id, so the feed can scroll to a video. YouTube ids are URL-safe already. */
@@ -58,7 +60,7 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ video, feedback, onFeedbackChange, highlighted = false }: Props) {
+export default function VideoCard({ video, feedback, onFeedbackChange, highlighted = false, onPlay }: Props) {
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -118,7 +120,10 @@ export default function VideoCard({ video, feedback, onFeedbackChange, highlight
           <button
             type="button"
             className="video-poster group/poster absolute inset-0 cursor-pointer"
-            onClick={() => setPlaying(true)}
+            onClick={() => {
+              setPlaying(true);
+              onPlay?.(video.youtubeId);
+            }}
             aria-label={`Play: ${video.title}`}
           >
             <img

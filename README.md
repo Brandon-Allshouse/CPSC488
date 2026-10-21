@@ -24,7 +24,8 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
   videos where clicking a title takes you back to that video in your feed
 - Less content from creators/channels you've marked as not interesting
-- Preferences and history saved for registered users
+- Preferences and history saved for registered users: a private watch history of the last 25 videos
+  you pressed play on
 - A random/discovery feed to branch out into new topics
 - Admin page: ban users, blacklist videos, and see a log of every admin action
 
@@ -53,10 +54,11 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/java/.../auth/       accounts, login sessions, password hashing
   src/main/java/.../feed/       topics, interests, video feed, YouTube client
   src/main/java/.../admin/      admin page endpoints: user bans, video blacklist, admin action log
+  src/main/java/.../history/    watch history: the last 25 videos each user pressed play on
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, LeaderboardPage (placeholder), AdminPage
+  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
   src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
   src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu)
@@ -290,7 +292,7 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 
 - **The BrainFeed logo and name** (top left, on every signed-in page) go back to the feed. On the
   feed itself they scroll back to the first video.
-- **A title on "Your videos"** (Profile → Liked videos) opens that video in the feed. If it's
+- **A title on "Your videos" or "Watch history"** (both in the Profile menu) opens that video in the feed. If it's
   already loaded, the feed scrolls to it; if not, it's added at the top. Either way it's outlined
   for a few seconds, and scrolling carries on from there. A video is never shown twice.
 - **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
@@ -546,6 +548,20 @@ scrolling. Videos are served from our database (filled once a day per topic by `
 so browsing never spends YouTube quota. Video feedback requires a signed-in account and is private
 to that account. The feedback endpoint returns saved videos as `{ youtubeId, title, creator }`;
 guests are asked to log in before voting.
+
+## Watch history API
+
+A video goes into the history when the user presses its play button. Scrolling past it doesn't
+count. Each user keeps their newest 25: watching a video again moves it back to the top, and older
+ones are deleted. The history is private (admins can't see it either), is deleted with the account,
+and loses a video if an admin bans it. All endpoints need a login and answer `401` otherwise.
+
+| Method | Path                                  | Body | Success response                                                         |
+|--------|---------------------------------------|------|--------------------------------------------------------------------------|
+| GET    | `/api/me/watch-history`               | none | `200 { videos: [{ youtubeId, title, creator, watchedAt }], limit: 25 }`, newest first |
+| PUT    | `/api/me/watch-history/{youtubeId}`   | none | `204`; records a play. `404` if the video isn't in our database          |
+| DELETE | `/api/me/watch-history/{youtubeId}`   | none | `204`; removes one video. `404` if it wasn't in the history              |
+| DELETE | `/api/me/watch-history`               | none | `204`; clears the whole history                                          |
 
 ## Admin API
 

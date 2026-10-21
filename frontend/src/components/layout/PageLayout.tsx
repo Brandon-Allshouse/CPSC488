@@ -15,6 +15,7 @@ export interface PageNavigation {
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
   onShowLeaderboard: () => void;
+  onShowHistory?: () => void;
   onShowAdmin?: () => void;
   onLogout: () => void;
 }

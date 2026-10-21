@@ -15,9 +15,11 @@ import FeedHeader from '../components/FeedHeader';
 import VideoCard, { videoCardId } from '../components/VideoCard';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { recordWatch } from '../api/history';
 import AdminPage from './AdminPage';
 import LeaderboardPage from './LeaderboardPage';
 import LikedVideosPage from './LikedVideosPage';
+import WatchHistoryPage from './WatchHistoryPage';
 
 // How long to keep checking for videos for brand-new topics: every 3 seconds, for up to a minute.
 const FINDING_CHECK_MS = 3000;
@@ -49,7 +51,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
   // Which screen is showing. FeedPage stays mounted, so the loaded videos are still there on the way back.
-  const [view, setView] = useState<'feed' | 'liked' | 'leaderboard' | 'admin'>('feed');
+  const [view, setView] = useState<'feed' | 'liked' | 'history' | 'leaderboard' | 'admin'>('feed');
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -225,6 +227,14 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     return () => clearTimeout(timer);
   }, [openedVideoId]);
 
+  // Pressing play adds the video to a signed-in user's watch history. It's done in the background:
+  // if saving fails, the video still plays, and the history just misses that one.
+  function recordPlay(youtubeId: string) {
+    if (user) {
+      recordWatch(youtubeId).catch(() => undefined);
+    }
+  }
+
   // The BrainFeed logo: back to the first video when already on the feed.
   function scrollToTop() {
     listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -254,11 +264,13 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     onEditInterests,
     onShowLikedVideos: () => setView('liked'),
     onShowLeaderboard: () => setView('leaderboard'),
+    onShowHistory: () => setView('history'),
     onShowAdmin: () => setView('admin'),
     onLogout,
   };
 
   if (view === 'liked') return <LikedVideosPage {...navigation} onOpenVideo={openSavedVideo} />;
+  if (view === 'history') return <WatchHistoryPage {...navigation} onOpenVideo={openSavedVideo} />;
   if (view === 'leaderboard') return <LeaderboardPage {...navigation} />;
   if (view === 'admin') return <AdminPage {...navigation} />;
 
@@ -275,6 +287,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
         onEditInterests={onEditInterests}
         onShowLikedVideos={navigation.onShowLikedVideos}
         onShowLeaderboard={navigation.onShowLeaderboard}
+        onShowHistory={navigation.onShowHistory}
         onShowAdmin={navigation.onShowAdmin}
         onLogout={onLogout}
       />
@@ -308,6 +321,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
             feedback={feedbackByVideo[video.youtubeId] ?? null}
             onFeedbackChange={changeVideoFeedback}
             highlighted={video.youtubeId === openedVideoId}
+            onPlay={recordPlay}
           />
         ))}
 

@@ -8,6 +8,7 @@ import {
   type SavedVideo,
   type Video,
 } from '../api/feed';
+import { fetchWatchHistory, recordWatch } from '../api/history';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import FeedPage from './FeedPage';
 
@@ -18,6 +19,13 @@ vi.mock('../api/admin', () => ({
   searchVideos: vi.fn().mockResolvedValue([]),
   fetchBannedVideos: vi.fn().mockResolvedValue([]),
   fetchAdminActions: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../api/history', () => ({
+  recordWatch: vi.fn(),
+  fetchWatchHistory: vi.fn(),
+  removeFromWatchHistory: vi.fn(),
+  clearWatchHistory: vi.fn(),
 }));
 
 vi.mock('../api/feed', () => ({
@@ -58,6 +66,7 @@ beforeEach(() => {
   useFakeIntersectionObserver();
   vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
   vi.mocked(saveMyVideoFeedback).mockResolvedValue(undefined);
+  vi.mocked(recordWatch).mockReset().mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -532,5 +541,64 @@ describe('FeedPage', () => {
     renderFeed();
     fireEvent.click(screen.getByRole('button', { name: 'Interests' }));
     expect(onEditInterests).toHaveBeenCalled();
+  });
+
+  it("adds a video to a signed-in user's watch history when play is pressed", async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1), makeVideo(2)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 2');
+
+    expect(recordWatch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Play: Test video 2' }));
+    expect(recordWatch).toHaveBeenCalledWith('video000002');
+    expect(recordWatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps playing even if saving to the watch history fails", async () => {
+    vi.mocked(recordWatch).mockRejectedValue(new Error('offline'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { container, scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play: Test video 1' }));
+    await settle();
+    expect(container.querySelector('iframe')).not.toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it("doesn't keep a watch history for guests", async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed(null);
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play: Test video 1' }));
+    expect(recordWatch).not.toHaveBeenCalled();
+  });
+
+  it('opens the watch history from the menu, and a video from it back in the feed', async () => {
+    const scrolledTo: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolledTo.push(this);
+    };
+    vi.mocked(fetchWatchHistory).mockResolvedValue({
+      videos: [{ youtubeId: 'video000009', title: 'Watched earlier', creator: 'Test Channel', watchedAt: '2026-10-21T12:00:00Z' }],
+      limit: 25,
+    });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { container, scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Watch history' }));
+    expect(screen.getByRole('heading', { name: 'Watch history' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Watched earlier' }));
+
+    const first = container.querySelector('article')!;
+    expect(first.id).toBe('video-video000009');
+    expect(scrolledTo).toEqual([first]);
   });
 });

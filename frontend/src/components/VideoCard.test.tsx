@@ -155,4 +155,22 @@ describe('VideoCard', () => {
     expect(article.getAttribute('data-highlighted')).toBe('true');
     expect(container.querySelector('.video-frame')!.classList.contains('ring-primary')).toBe(true);
   });
+
+  it('tells the feed when play is pressed, so it can go in the watch history', () => {
+    const onPlay = vi.fn();
+    render(<VideoCard video={video} feedback={null} onFeedbackChange={onFeedbackChange} onPlay={onPlay} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Play: How Plants Grow' }));
+    expect(onPlay).toHaveBeenCalledWith('dQw4w9WgXcQ');
+    expect(onPlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't count scrolling past a video as watching it", () => {
+    const onPlay = vi.fn();
+    const { container } = render(
+      <VideoCard video={video} feedback={null} onFeedbackChange={onFeedbackChange} onPlay={onPlay} />,
+    );
+    scrollInto(container.querySelector('article')!, 1);
+    scrollInto(container.querySelector('article')!, 0);
+    expect(onPlay).not.toHaveBeenCalled();
+  });
 });
