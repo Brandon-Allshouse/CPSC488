@@ -102,7 +102,7 @@ public class AdminController {
         AdminRepository.AdminUser target = admins.findUser(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found."));
         checkCanBan(admin, target);
-        if (!admins.banUser(admin.id(), userId, reason)) {
+        if (!admins.banUser(admin.id(), ctx.ip(), userId, reason)) {
             throw ApiException.notFound("User not found.");
         }
         SecurityLog.success("admin_ban_user", ctx, admin.id(), "target=" + userId);
@@ -112,7 +112,7 @@ public class AdminController {
     private void handleUnbanUser(Context ctx) {
         User admin = admin(ctx);
         long userId = parseUserId(ctx.pathParam("id"));
-        if (!admins.unbanUser(admin.id(), userId)) {
+        if (!admins.unbanUser(admin.id(), ctx.ip(), userId)) {
             throw ApiException.notFound("That user isn't banned.");
         }
         SecurityLog.success("admin_unban_user", ctx, admin.id(), "target=" + userId);
@@ -134,7 +134,7 @@ public class AdminController {
         User admin = admin(ctx);
         String youtubeId = FeedController.checkYoutubeId(ctx.pathParam("youtubeId"));
         String reason = checkReason(RequestBodies.parse(ctx, BanRequest.class).reason());
-        admins.banVideo(admin.id(), youtubeId, reason);
+        admins.banVideo(admin.id(), ctx.ip(), youtubeId, reason);
         SecurityLog.success("admin_ban_video", ctx, admin.id(), "target=" + youtubeId);
         ctx.status(204);
     }
@@ -142,7 +142,7 @@ public class AdminController {
     private void handleUnbanVideo(Context ctx) {
         User admin = admin(ctx);
         String youtubeId = FeedController.checkYoutubeId(ctx.pathParam("youtubeId"));
-        if (!admins.unbanVideo(admin.id(), youtubeId)) {
+        if (!admins.unbanVideo(admin.id(), ctx.ip(), youtubeId)) {
             throw ApiException.notFound("That video isn't banned.");
         }
         SecurityLog.success("admin_unban_video", ctx, admin.id(), "target=" + youtubeId);

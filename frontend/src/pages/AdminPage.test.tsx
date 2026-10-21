@@ -40,6 +40,9 @@ function userRow(overrides: Partial<AdminUser> = {}): AdminUser {
     admin: false,
     bannedAt: null,
     banReason: null,
+    signupIp: '192.0.2.10',
+    lastLoginIp: '198.51.100.7',
+    lastLoginAt: '2026-10-20T12:00:00Z',
     ...overrides,
   };
 }
@@ -87,6 +90,7 @@ beforeEach(() => {
       action: 'ban_video',
       target: 'video000009',
       reason: 'Off-topic',
+      ip: '203.0.113.5',
       createdAt: '2026-10-06T00:00:00Z',
     },
   ]);
@@ -254,4 +258,46 @@ describe('AdminPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(handlers.onBack).toHaveBeenCalledTimes(1);
   });
+
+  it('shows where each user signed up and last logged in from', async () => {
+    renderPage();
+    const row = (await within(usersTable()).findByText('testuser')).closest('tr')!;
+    expect(within(row).getByText('192.0.2.10')).toBeTruthy();
+    expect(within(row).getByText('198.51.100.7')).toBeTruthy();
+  });
+
+  it('says when an older account has no recorded IPs', async () => {
+    vi.mocked(searchUsers).mockResolvedValue([userRow({ signupIp: null, lastLoginIp: null, lastLoginAt: null })]);
+    renderPage();
+    const row = (await within(usersTable()).findByText('testuser')).closest('tr')!;
+    expect(within(row).getAllByText('Unknown IP')).toHaveLength(2);
+    expect(within(row).getByText('Never')).toBeTruthy();
+  });
+
+  it('shows which IP each admin action came from', async () => {
+    renderPage();
+    const actions = await screen.findByRole('region', { name: 'Recent admin actions' });
+    expect(within(actions).getByRole('columnheader', { name: 'IP' })).toBeTruthy();
+    expect(await within(actions).findByText('203.0.113.5')).toBeTruthy();
+  });
+
+  it('shows Unknown for admin actions from before IPs were recorded', async () => {
+    vi.mocked(fetchAdminActions).mockResolvedValue([
+      { id: 1, admin: 'testadmin', action: 'unban_user', target: 'testuser (#2)', reason: null, ip: null, createdAt: '2026-10-06T00:00:00Z' },
+    ]);
+    renderPage();
+    const actions = await screen.findByRole('region', { name: 'Recent admin actions' });
+    expect(await within(actions).findByText('Unknown')).toBeTruthy();
+  });
+
+  it('can search users by IP address', async () => {
+    renderPage();
+    await screen.findByText('testuser');
+    const search = screen.getByLabelText('Search users');
+    expect(search.getAttribute('placeholder')).toContain('IP');
+    fireEvent.change(search, { target: { value: '198.51.100.7' } });
+    fireEvent.submit(search.closest('form')!);
+    await vi.waitFor(() => expect(searchUsers).toHaveBeenLastCalledWith('198.51.100.7'));
+  });
 });
+

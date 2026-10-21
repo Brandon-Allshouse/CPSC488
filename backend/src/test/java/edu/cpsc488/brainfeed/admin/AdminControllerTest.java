@@ -18,7 +18,8 @@ class AdminControllerTest {
     private static final User ADMIN = new User(1, "admin@sru.edu", "testadmin", OffsetDateTime.now(), true);
 
     private static AdminRepository.AdminUser target(long id, boolean admin) {
-        return new AdminRepository.AdminUser(id, "testuser", "test@sru.edu", OffsetDateTime.now(), admin, null, null);
+        return new AdminRepository.AdminUser(id, "testuser", "test@sru.edu", OffsetDateTime.now(), admin, null, null,
+                "192.0.2.1", "192.0.2.1", OffsetDateTime.now());
     }
 
     private static void assertBadRequest(Runnable code) {

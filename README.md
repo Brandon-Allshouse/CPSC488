@@ -428,8 +428,15 @@ Then start your next change from step 1.
 
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
-`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`,
+`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `TRUSTED_PROXIES`, `PORT`,
 `YOUTUBE_API_KEY`, `NVD_API_KEY`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
+
+**Users' IP addresses.** Browsers reach the backend through a proxy (Vite in development), so the
+backend learns each user's real IP from the proxy's `X-Forwarded-For` header, and only believes
+that header from the proxies listed in `TRUSTED_PROXIES` (see `ClientIp.java`). Docker Compose
+sets it to the frontend container. In local Docker everyone shows up as the same address, your
+own machine as Docker sees it (something like `172.x.0.1`). In production, set `TRUSTED_PROXIES`
+to the web server in front of the backend, and make sure that server sets `X-Forwarded-For`.
 
 ### Getting a YouTube API key
 
@@ -547,16 +554,19 @@ Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the use
 | Method | Path                                    | Body / query      | Success response                                                     |
 |--------|-----------------------------------------|-------------------|----------------------------------------------------------------------|
 | GET    | `/api/admin/stats`                      | none              | `200 { users, bannedUsers, admins, videos, bannedVideos }`           |
-| GET    | `/api/admin/users`                      | `?q=text`         | `200 { users }`, up to 50 matching username or email, newest first   |
+| GET    | `/api/admin/users`                      | `?q=text`         | `200 { users }`, up to 50 matching username, email or IP address, newest first |
 | PUT    | `/api/admin/users/{id}/ban`             | `{ reason }`      | `204`; bans and logs them out everywhere. `400` for yourself or an admin |
 | DELETE | `/api/admin/users/{id}/ban`             | none              | `204`; `404` if they weren't banned                                  |
 | GET    | `/api/admin/videos`                     | `?q=text`         | `200 { videos }`, up to 50 matching title, channel or id             |
 | GET    | `/api/admin/banned-videos`              | none              | `200 { videos }`, newest ban first                                   |
 | PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
 | DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
-| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans and unbans                |
+| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans and unbans, with the admin's IP |
 
-A reason (1-200 characters, one line) is required for every ban. Banning a video works for any
+A user in `users` is `{ id, username, email, createdAt, admin, bannedAt, banReason, signupIp,
+lastLoginIp, lastLoginAt }`. The IPs are `null` for accounts from before IPs were recorded, and
+they're never included in any non-admin response. A reason (1-200 characters, one line) is
+required for every ban. Banning a video works for any
 YouTube id, even one the feed hasn't fetched yet.
 
 ### Admin accounts

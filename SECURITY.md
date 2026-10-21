@@ -106,10 +106,21 @@ Browser ──HTTPS──▶ React frontend ──/api (same origin)──▶ Ja
 | Admins are accountable | Every ban and unban is written to `admin_actions` (who, what, when, why) in the same transaction as the change, and to the `security` log. A reason is required, limited to 200 characters on one line |
 | Admin input is validated like any other | User ids must be positive numbers, video ids must match YouTube's format, and search text is length-capped with `%`, `_` and `\` escaped so they can't act as wildcards |
 
+### Users' IP addresses (OWASP Top 10 A01, A09; OWASP Logging Cheat Sheet)
+
+| Requirement | Implementation |
+|---|---|
+| Log the real client, not our proxy | `ClientIp` reads `X-Forwarded-For` from right to left and stops at the first address that isn't one of our `TRUSTED_PROXIES`. Rate limits, the security log and the admin page all use it |
+| A client can't fake their IP | The header is ignored unless the connection comes from a trusted proxy, and anything the client wrote into it themselves sits to the left of what our proxy appended, so it's never reached. At most 20 hops are read |
+| No lookups driven by attackers | Header values are parsed with `InetAddress.ofLiteral`, which never does DNS. Only hostnames from our own settings are looked up (cached for 30 seconds) |
+| Only valid addresses are stored | Stored as Postgres `INET` through `?` placeholders, after `ClientIp.normalize` turns anything that isn't an IP into `NULL` |
+| IP addresses are personal data | Only admins can see them (sign-up IP, last login IP and time, and the IP of each admin action). `/api/auth/me` and every other user-facing response leave them out. Only the latest login IP is kept, not a history |
+
 ### Logging (OWASP Top 10 A09, OWASP Logging Cheat Sheet)
 
 Login, logout, registration, rate-limit and policy rejections, banned-account logins, refused
-admin access, and every admin ban or unban are logged under the `security` logger
+admin access, blocked cross-site requests (with the origin), and every admin ban or unban are
+logged under the `security` logger
 with the outcome, user id, IP and user agent. Passwords, tokens and email addresses are never logged,
 and control characters are stripped so user input can't forge log lines.
 
@@ -121,7 +132,7 @@ and control characters are stripped so user input can't forge log lines.
 | PS.1 Protect code and secrets | `.env` is gitignored; secrets come only from the environment |
 | PW.4 Reuse well-secured components | Maintained libraries only (Javalin, BouncyCastle, Flyway, HikariCP, pgJDBC; React, Tailwind CSS, lucide-react) with versions pinned in lockfiles, on long-term support (LTS) releases of Java and Node. New packages must pass `npm audit` and be at least two weeks old when added, since brand-new releases are where supply-chain attacks hide. shadcn/ui components are copied into the repo as source, so they're reviewed like our own code |
 | PW.7 Review code | Security-relevant PRs are reviewed against this document; CodeQL runs on every PR |
-| PW.8 Test | Unit tests run in CI. Backend: hashing, password policy, breach-list matching, rate limiting, log sanitizing, email/username rules, pepper and `.env` loading, YouTube response handling, feed and feedback input checks, admin input checks and ban rules (no banning yourself or other admins), the YouTube search budget and new-topic fetching. Frontend: input validation, the API helper's CSRF header, and every page and component (including that YouTube titles and channel names render as plain text, the player is sandboxed, the feed stops checking for new videos after a minute or when the user leaves, saved feedback appears in the user's lists, non-admins can't reach the admin page, bans need a reason, and pasted YouTube links are parsed safely). The endpoints themselves aren't tested against a real database yet (planned API tests) |
+| PW.8 Test | Unit tests run in CI. Backend: hashing, password policy, breach-list matching, rate limiting, log sanitizing, email/username rules, pepper and `.env` loading, YouTube response handling, feed and feedback input checks, admin input checks and ban rules (no banning yourself or other admins), finding the real client IP (including spoofed and garbled `X-Forwarded-For` headers), the YouTube search budget and new-topic fetching. Frontend: input validation, the API helper's CSRF header, and every page and component (including that YouTube titles and channel names render as plain text, the player is sandboxed, the feed stops checking for new videos after a minute or when the user leaves, saved feedback appears in the user's lists, non-admins can't reach the admin page, bans need a reason, and pasted YouTube links are parsed safely). The endpoints themselves aren't tested against a real database yet (planned API tests) |
 | RV.1 Find vulnerabilities | Weekly Dependabot PRs (see "Dependency updates" in the README), `npm audit` in CI, and OWASP Dependency-Check run by hand (`mvn verify -P security-scan`) |
 
 ## Checklist for new features
@@ -153,7 +164,7 @@ Things we know aren't covered yet, and what would need to change:
    - A user who forgets their password loses the account. The team can only help by editing the database directly. Don't add a reset flow that works without proving the user owns the account (for example, security questions, which NIST forbids). When MFA is added, give each user about 10 one-time recovery codes at setup (stored hashed, like passwords). Those will be the recovery path for a lost phone, since there's no email to fall back on.
    - Sign-up says when an email is already registered, so someone could use it to check whether an address has an account. The sign-up rate limit makes this slow to do in bulk.
 3. **No CAPTCHA yet, so bots can create accounts.** The only protection is the rate limit of 20 sign-ups per hour per IP, and someone with many IPs can get around it. A CAPTCHA on sign-up is planned. The CAPTCHA provider's secret key goes in `.env`, the backend must check every token with the provider (never trust the browser's answer), and the Content-Security-Policy will need the provider's domains.
-4. **Rate limits are in memory.** They reset on restart and aren't shared across multiple backend instances. Move them to the DB or Redis before scaling out. Behind the Vite dev proxy, all clients share one IP.
+4. **Rate limits are in memory.** They reset on restart and aren't shared across multiple backend instances. Move them to the DB or Redis before scaling out. They're counted per real client IP (see "Users' IP addresses"), so in production `TRUSTED_PROXIES` must name the web server in front of the backend, or every user would share that server's IP and its limits.
 5. **The breached-password check fails open** if Have I Been Pwned is unreachable, so an outage doesn't block sign-ups. The other policy rules still apply.
 6. **HTTPS is a deployment requirement.** Deploy behind TLS 1.2+, set `COOKIE_SECURE=true`, and send the CSP and `frame-ancestors` as HTTP headers from the web server.
 7. **The pepper can't be rotated.** Changing it would stop every existing password from working, and without a password reset those accounts would be lost. Store it in a secrets manager in production.
@@ -162,3 +173,4 @@ Things we know aren't covered yet, and what would need to change:
 10. **pgAdmin is a local development tool only.** It gives full read and write access to the database, so it's locked down: it only starts with `--profile tools`, listens on `127.0.0.1` only, runs as a non-root user, and has its own login. It won't start without `PGADMIN_PASSWORD`, so there's no default password. Never deploy it or expose port 5050. On a shared server, use `psql` over SSH instead.
 11. **A banned person can make a new account.** Without email verification or a CAPTCHA (gaps 2 and 3), nothing stops someone signing up again with a different email. Bans stop the account, not the person. Email verification is what would make bans stick.
 12. **Admin accounts are the most valuable ones to steal.** An admin can see every user's email and ban anyone who isn't an admin, and admins log in with just a password like everyone else. Keep the number of admins small, use long unique passwords, and when MFA is added (gap 1), require it for admins first.
+13. **IP addresses are kept until the next login.** Each account keeps its sign-up IP and its latest login IP indefinitely, and admin actions keep theirs. That's fine for a class project, but a real deployment needs a privacy notice and a retention limit (for example, clearing IPs older than 90 days), since IP addresses count as personal data under privacy laws like the GDPR.

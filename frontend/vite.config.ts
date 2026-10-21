@@ -56,7 +56,9 @@ export default defineConfig({
     strictPort: true,
     watch: usePolling ? { usePolling: true, interval: 300 } : undefined,
     proxy: {
-      '/api': apiProxyTarget,
+      // xfwd adds X-Forwarded-For, so the backend can see the real client's IP. The backend only
+      // believes it from addresses in TRUSTED_PROXIES (see ClientIp.java).
+      '/api': { target: apiProxyTarget, xfwd: true },
     },
   },
 });

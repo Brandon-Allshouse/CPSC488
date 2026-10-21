@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed.auth;
 
 import edu.cpsc488.brainfeed.ApiException;
+import edu.cpsc488.brainfeed.ClientIp;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -52,17 +53,21 @@ public class UserRepository {
      *
      * @throws ApiException 409 if the email or username is already taken
      */
-    User create(String email, String username, String passwordHash) {
+    User create(String email, String username, String passwordHash, String ip) {
+        // Signing up logs the new user in, so it also counts as their last login.
         String sql = """
-                INSERT INTO users (email, username, password_hash)
-                VALUES (?, ?, ?)
+                INSERT INTO users (email, username, password_hash, signup_ip, last_login_ip, last_login_at)
+                VALUES (?, ?, ?, CAST(? AS inet), CAST(? AS inet), now())
                 RETURNING *
                 """;
+        String storedIp = ClientIp.normalize(ip);
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, email);
             ps.setString(2, username);
             ps.setString(3, passwordHash);
+            ps.setString(4, storedIp);
+            ps.setString(5, storedIp);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return mapUser(rs);
@@ -77,6 +82,19 @@ public class UserRepository {
                 }
                 throw ApiException.conflict("An account with that email already exists.");
             }
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Remembers where and when a user last logged in, for the admin page. */
+    void recordLogin(long userId, String ip) {
+        String sql = "UPDATE users SET last_login_ip = CAST(? AS inet), last_login_at = now() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, ClientIp.normalize(ip));
+            ps.setLong(2, userId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
