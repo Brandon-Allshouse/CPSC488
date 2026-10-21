@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchFeed,
@@ -52,6 +52,9 @@ function renderFeed(user = testUser as typeof testUser | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // clearAllMocks keeps queued mockResolvedValueOnce answers, so a test that stopped early would
+  // hand its leftover pages to the next test. Reset fetchFeed completely instead.
+  vi.mocked(fetchFeed).mockReset();
   useFakeIntersectionObserver();
   vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
   vi.mocked(saveMyVideoFeedback).mockResolvedValue(undefined);
@@ -74,15 +77,57 @@ describe('FeedPage', () => {
   it('shows the brain logo in the bottom-right corner', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
-    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('feed-logo');
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('feed-logo')).toBe(true);
   });
 
   it('shows the brain logo beside the BrainFeed header', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
     const brand = screen.getByText('BrainFeed').parentElement!;
-    expect(brand.className).toBe('feed-brand');
+    expect(brand.classList.contains('feed-brand')).toBe(true);
     expect(brand.querySelector('.feed-brand-logo')).toBeTruthy();
+  });
+
+  it('moves between videos with the arrow keys and J/K', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    const { container } = renderFeed();
+    const list = container.querySelector('.feed-list')!;
+    const scrollBy = vi.fn();
+    Object.defineProperty(list, 'clientHeight', { value: 600 });
+    Object.defineProperty(list, 'scrollBy', { value: scrollBy });
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' });
+    fireEvent.keyDown(document.body, { key: 'j' });
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' });
+    fireEvent.keyDown(document.body, { key: 'k' });
+
+    expect(scrollBy.mock.calls.map(([options]) => options.top)).toEqual([600, 600, -600, -600]);
+  });
+
+  it('ignores the shortcut keys while typing or with Ctrl held', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    const { container } = renderFeed();
+    const list = container.querySelector('.feed-list')!;
+    const scrollBy = vi.fn();
+    Object.defineProperty(list, 'scrollBy', { value: scrollBy });
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+
+    fireEvent.keyDown(input, { key: 'j' });
+    fireEvent.keyDown(document.body, { key: 'ArrowDown', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: 'x' });
+
+    expect(scrollBy).not.toHaveBeenCalled();
+    input.remove();
+  });
+
+  it('turns the shortcut keys off while another page is open', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    // the feed list isn't on screen anymore, so a key press must not throw or scroll anything
+    expect(() => fireEvent.keyDown(document.body, { key: 'ArrowDown' })).not.toThrow();
   });
 
   it('scrolls the feed up and down when the navigation buttons are pressed', () => {
@@ -153,6 +198,23 @@ describe('FeedPage', () => {
 
     const firstSeed = vi.mocked(fetchFeed).mock.calls[0][1];
     expect(vi.mocked(fetchFeed).mock.calls[1]).toEqual([[1, 2], firstSeed, 1]);
+  });
+
+  it('keeps loading more videos after visiting another page and coming back', async () => {
+    vi.mocked(fetchFeed)
+      .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: 1, fetching: false })
+      .mockResolvedValueOnce({ videos: [makeVideo(2)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+
+    // the bottom marker is a new element now, and it still has to trigger the next page
+    scrollToBottom();
+    expect(await screen.findByText('Test video 2')).toBeTruthy();
   });
 
   it('stops asking for more after the last page', async () => {
@@ -291,6 +353,133 @@ describe('FeedPage', () => {
     expect(screen.queryByRole('heading', { name: 'Admin' })).toBeNull();
   });
 
+  // jsdom has no scrollIntoView, so record which elements were scrolled to.
+  function trackScrollIntoView() {
+    const scrolledTo: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolledTo.push(this);
+    };
+    return scrolledTo;
+  }
+
+  async function openFromYourVideos(title: string) {
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(await screen.findByRole('button', { name: title }));
+  }
+
+  it('opens a liked video that is already in the feed and scrolls to it', async () => {
+    const scrolledTo = trackScrollIntoView();
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000002', title: 'Test video 2', creator: 'Test Channel' }],
+      dislikedVideos: [],
+    });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1), makeVideo(2)], nextPage: null, fetching: false });
+    const { container, scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 2');
+
+    await openFromYourVideos('Test video 2');
+
+    // back on the feed, with the same two videos and no copy
+    expect(container.querySelectorAll('article')).toHaveLength(2);
+    const card = container.querySelector('#video-video000002')!;
+    expect(scrolledTo).toEqual([card]);
+    expect(card.getAttribute('data-highlighted')).toBe('true');
+  });
+
+  it('puts a liked video at the top of the feed when it was not loaded yet', async () => {
+    const scrolledTo = trackScrollIntoView();
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000009', title: 'Saved video', creator: 'Saved Channel' }],
+      dislikedVideos: [],
+    });
+    vi.mocked(fetchFeed)
+      .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: 1, fetching: false })
+      .mockResolvedValueOnce({ videos: [makeVideo(9), makeVideo(10)], nextPage: null, fetching: false });
+    const { container, scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    await openFromYourVideos('Saved video');
+
+    const cards = container.querySelectorAll('article');
+    expect(cards[0].id).toBe('video-video000009');
+    expect(within(cards[0] as HTMLElement).getByText('Saved video')).toBeTruthy();
+    expect(within(cards[0] as HTMLElement).getByText('Saved Channel')).toBeTruthy();
+    expect(scrolledTo).toEqual([cards[0]]);
+
+    // the next page has the same video in it, but it isn't shown a second time
+    scrollToBottom();
+    await screen.findByText('Test video 10');
+    expect(container.querySelectorAll('#video-video000009')).toHaveLength(1);
+  });
+
+  it('stops outlining the opened video after a few seconds', async () => {
+    trackScrollIntoView();
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000001', title: 'Test video 1', creator: 'Test Channel' }],
+      dislikedVideos: [],
+    });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { container, scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    const title = await screen.findByRole('button', { name: 'Test video 1' });
+
+    vi.useFakeTimers();
+    fireEvent.click(title);
+    const card = container.querySelector('#video-video000001')!;
+    expect(card.getAttribute('data-highlighted')).toBe('true');
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(card.hasAttribute('data-highlighted')).toBe(false);
+  });
+
+  it("doesn't jump back to the opened video when returning to the feed later", async () => {
+    const scrolledTo = trackScrollIntoView();
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000001', title: 'Test video 1', creator: 'Test Channel' }],
+      dislikedVideos: [],
+    });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+    await openFromYourVideos('Test video 1');
+    expect(scrolledTo).toHaveLength(1);
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+    expect(scrolledTo).toHaveLength(1);
+  });
+
+  it('scrolls back to the first video when the BrainFeed logo is clicked on the feed', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    const { container } = renderFeed();
+    const scrollTo = vi.fn();
+    Object.defineProperty(container.querySelector('.feed-list')!, 'scrollTo', { value: scrollTo });
+
+    fireEvent.click(screen.getByRole('button', { name: 'BrainFeed, go to your feed' }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('comes back to the feed when the BrainFeed logo is clicked on another page', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'BrainFeed, go to your feed' }));
+    expect(screen.queryByRole('heading', { name: 'Leaderboard' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Scroll down' })).toBeTruthy();
+  });
+
   it('shows the signed-in user liked and disliked videos and returns to the feed', async () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
       likedVideos: [{ youtubeId: 'video000001', title: 'Liked title', creator: 'Liked creator' }],
@@ -300,9 +489,9 @@ describe('FeedPage', () => {
     renderFeed();
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
 
-    expect(screen.getByRole('heading', { name: 'View Liked videos' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Disliked videos' })).toBeTruthy();
     expect(await screen.findByText('Liked title')).toBeTruthy();
     expect(screen.getByText('Liked creator')).toBeTruthy();
@@ -324,7 +513,7 @@ describe('FeedPage', () => {
     renderFeed(null);
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
 
     expect(screen.getAllByText('Sign in to view saved videos.')).toHaveLength(2);
     expect(fetchMyVideoFeedback).not.toHaveBeenCalled();

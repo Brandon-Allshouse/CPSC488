@@ -20,7 +20,11 @@ class FakeObserver {
   unobserve() {}
 
   disconnect() {
-    observers.splice(observers.indexOf(this), 1);
+    // indexOf is -1 if this one is already gone, and splice(-1, 1) would remove someone else's.
+    const index = observers.indexOf(this);
+    if (index >= 0) {
+      observers.splice(index, 1);
+    }
   }
 
   takeRecords() {

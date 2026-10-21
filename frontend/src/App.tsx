@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { fetchCurrentUser, logout, type User } from './api/auth';
 import { fetchMyInterests, saveMyInterests } from './api/feed';
 import LoginPage from './pages/LoginPage';
 import InterestsPage from './pages/InterestsPage';
 import FeedPage from './pages/FeedPage';
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center gap-2 text-sm text-muted-foreground" role="status">
+      <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+      Loading…
+    </div>
+  );
+}
 
 // Who is using the app right now. Decides which page is shown.
 type Session =
@@ -55,7 +65,7 @@ export default function App() {
 
   switch (session.kind) {
     case 'loading':
-      return <div className="center-screen muted">Loading…</div>;
+      return <LoadingScreen />;
     case 'anonymous':
       return (
         <LoginPage
@@ -70,7 +80,7 @@ export default function App() {
     case 'user': {
       const user = session.kind === 'user' ? session.user : null;
       if (interests === null) {
-        return <div className="center-screen muted">Loading…</div>;
+        return <LoadingScreen />;
       }
       if (editingInterests || interests.length === 0) {
         return (

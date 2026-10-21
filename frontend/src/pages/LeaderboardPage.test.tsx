@@ -34,7 +34,7 @@ describe('LeaderboardPage', () => {
   it('keeps the profile menu so the user can go somewhere else', () => {
     render(<LeaderboardPage user={testUser} {...handlers} />);
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
     expect(handlers.onShowLikedVideos).toHaveBeenCalledTimes(1);
   });
 

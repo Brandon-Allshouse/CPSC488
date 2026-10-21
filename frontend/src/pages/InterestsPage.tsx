@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
-import brainLogo from '../assets/brainfeed-logo.png';
+import { Check, ChevronRight, CircleAlert } from 'lucide-react';
+import AuthLayout from '@/components/layout/AuthLayout';
+import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface Props {
   /** Topic ids that start out selected. */
@@ -50,75 +54,106 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
   }
 
   return (
-    <main className="center-screen">
-      <img className="auth-logo" src={brainLogo} alt="BrainFeed brain logo" />
-      <section className="auth-card interests-card" aria-labelledby="interests-title">
-        <header className="auth-header">
-          <p className="brand">BrainFeed</p>
-          <h1 id="interests-title">What do you want to learn about?</h1>
-          <p className="muted">
-            Open a subject and pick all of it, or just the parts you want, like Algebra 2. Pick as many
-            as you like. You can change them any time
-            {isGuest ? ', but as a guest they reset when you leave.' : '.'}
-          </p>
-        </header>
+    <AuthLayout
+      name="interests"
+      title="What do you want to learn about?"
+      className="max-w-2xl"
+      description={
+        <>
+          Open a subject and pick all of it, or just the parts you want, like Algebra 2. Pick as many as
+          you like. You can change them any time
+          {isGuest ? ', but as a guest they reset when you leave.' : '.'}
+        </>
+      }
+    >
+      {topics === null && !error && (
+        <div className="flex flex-col gap-2" aria-hidden="true">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-12 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      )}
+      {topics === null && !error && <p className="text-sm text-muted-foreground">Loading topics…</p>}
 
-        {topics === null && !error && <p className="muted">Loading topics…</p>}
-
-        {topics && (
-          <div className="subject-list">
-            {topics
-              .filter((topic) => topic.parentId === null)
-              .map((subject) => {
-                const subs = topics.filter((topic) => topic.parentId === subject.id);
-                const picked = [subject, ...subs].filter((topic) => selected.has(topic.id)).length;
-                // Sections start open if something in them was already picked.
-                const open = [subject, ...subs].some((topic) => startOpen.has(topic.id));
-                return (
-                  <details key={subject.id} className="subject" open={open}>
-                    <summary>
-                      {subject.name}
-                      {picked > 0 && <span className="subject-count"> · {picked} picked</span>}
-                    </summary>
-                    <div className="topic-grid">
-                      {[subject, ...subs].map((topic) => (
+      {topics && (
+        <div id="subject-list" className="flex max-h-[55dvh] flex-col gap-2 overflow-y-auto pr-1">
+          {topics
+            .filter((topic) => topic.parentId === null)
+            .map((subject) => {
+              const subs = topics.filter((topic) => topic.parentId === subject.id);
+              const picked = [subject, ...subs].filter((topic) => selected.has(topic.id)).length;
+              // Sections start open if something in them was already picked.
+              const open = [subject, ...subs].some((topic) => startOpen.has(topic.id));
+              return (
+                <details
+                  key={subject.id}
+                  className="subject group rounded-lg border bg-background/40 transition-colors duration-150 open:bg-background/70"
+                  open={open}
+                >
+                  <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 font-medium select-none">
+                    <ChevronRight
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90"
+                    />
+                    {subject.name}
+                    {picked > 0 && (
+                      <>
+                        {/* Read out as "Math · 2 picked"; the dot is hidden on screen. */}
+                        <span className="sr-only"> · </span>
+                        <span className="subject-count ml-auto rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                          {picked} picked
+                        </span>
+                      </>
+                    )}
+                  </summary>
+                  <div className="topic-grid flex flex-wrap gap-2 px-4 pb-4">
+                    {[subject, ...subs].map((topic) => {
+                      const isPicked = selected.has(topic.id);
+                      return (
                         <button
                           key={topic.id}
                           type="button"
-                          className="topic-chip"
-                          aria-pressed={selected.has(topic.id)}
+                          aria-pressed={isPicked}
                           onClick={() => toggle(topic.id)}
+                          className={cn(
+                            'topic-chip inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-all duration-150 hover:border-primary/60 active:scale-95',
+                            isPicked && 'border-primary bg-primary/15 text-primary',
+                          )}
                         >
+                          {isPicked && <Check aria-hidden="true" className="size-3.5" />}
                           {topic === subject ? `All of ${subject.name}` : topic.name}
                         </button>
-                      ))}
-                    </div>
-                  </details>
-                );
-              })}
-          </div>
-        )}
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
+        </div>
+      )}
 
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
+      {error && (
+        <Alert variant="destructive" role="alert">
+          <CircleAlert aria-hidden="true" />
+          {error}
+        </Alert>
+      )}
 
-        <button
-          type="button"
-          className="btn btn-primary"
+      <div className="flex flex-col gap-2 sm:flex-row-reverse">
+        <Button
+          size="lg"
+          className="sm:flex-1"
           disabled={selected.size === 0 || saving || topics === null}
           onClick={handleSave}
         >
           {saving ? 'Saving…' : selected.size === 0 ? 'Pick at least one topic' : 'Show my feed'}
-        </button>
+        </Button>
         {onCancel && (
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          <Button variant="outline" size="lg" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
         )}
-      </section>
-    </main>
+      </div>
+    </AuthLayout>
   );
 }
