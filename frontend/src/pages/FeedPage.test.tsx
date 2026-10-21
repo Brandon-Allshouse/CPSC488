@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchFeed, type Video } from '../api/feed';
+import {
+  fetchFeed,
+  fetchMyVideoFeedback,
+  saveMyVideoFeedback,
+  type SavedVideo,
+  type Video,
+} from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import FeedPage from './FeedPage';
 
-vi.mock('../api/feed', () => ({ fetchFeed: vi.fn() }));
+vi.mock('../api/feed', () => ({
+  fetchFeed: vi.fn(),
+  fetchMyVideoFeedback: vi.fn(),
+  saveMyVideoFeedback: vi.fn(),
+}));
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
 
@@ -34,6 +44,8 @@ function renderFeed(user = testUser as typeof testUser | null) {
 beforeEach(() => {
   vi.clearAllMocks();
   useFakeIntersectionObserver();
+  vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
+  vi.mocked(saveMyVideoFeedback).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -87,6 +99,36 @@ describe('FeedPage', () => {
     expect(await screen.findByText('Test video 1')).toBeTruthy();
     expect(screen.getByText('Test video 2')).toBeTruthy();
     expect(fetchFeed).toHaveBeenCalledWith([1, 2], expect.any(Number), 0);
+  });
+
+  it('loads saved choices and persists a changed video choice', async () => {
+    const savedVideo: SavedVideo = {
+      youtubeId: 'video000001',
+      title: 'Test video 1',
+      creator: 'Test Channel',
+    };
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [savedVideo], dislikedVideos: [] });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+
+    scrollToBottom();
+    const like = await screen.findByRole('button', { name: 'I liked this video' });
+    await waitFor(() => expect(like.getAttribute('aria-pressed')).toBe('true'));
+    expect(like.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(like);
+    await vi.waitFor(() => expect(saveMyVideoFeedback).toHaveBeenCalledWith('video000001', null));
+    await waitFor(() => expect(like.getAttribute('aria-pressed')).toBe('false'));
+  });
+
+  it('takes a guest to login instead of saving video feedback', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed(null);
+    scrollToBottom();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'I liked this video' }));
+
+    expect(onLogout).toHaveBeenCalled();
+    expect(saveMyVideoFeedback).not.toHaveBeenCalled();
   });
 
   it('loads the next page when scrolling to the bottom, with the same seed', async () => {
@@ -204,17 +246,72 @@ describe('FeedPage', () => {
     expect(await screen.findByText('Test video 1')).toBeTruthy();
   });
 
-  it('shows the username and a log out button', () => {
+  it('shows the username and sign out action in the profile menu', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
     expect(screen.getByText('testuser')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onLogout).toHaveBeenCalled();
   });
 
-  it('shows Guest and a log in button for guests', () => {
+  it('opens the blank leaderboard screen and returns to the feed', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+
+    expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Leaderboard information' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Update leaderboard' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+    expect(screen.getByRole('button', { name: 'Interests' })).toBeTruthy();
+  });
+
+  it('shows the signed-in user liked and disliked videos and returns to the feed', async () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({
+      likedVideos: [{ youtubeId: 'video000001', title: 'Liked title', creator: 'Liked creator' }],
+      dislikedVideos: [{ youtubeId: 'video000002', title: 'Disliked title', creator: 'Disliked creator' }],
+    });
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
+
+    expect(screen.getByRole('heading', { name: 'View Liked videos' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Disliked videos' })).toBeTruthy();
+    expect(await screen.findByText('Liked title')).toBeTruthy();
+    expect(screen.getByText('Liked creator')).toBeTruthy();
+    expect(screen.getByText('Disliked title')).toBeTruthy();
+    expect(screen.getByText('Disliked creator')).toBeTruthy();
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Title',
+      'Creator',
+      'Title',
+      'Creator',
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+    expect(screen.getByText('Profile')).toBeTruthy();
+  });
+
+  it('does not request or reveal saved videos to a guest', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed(null);
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
+
+    expect(screen.getAllByText('Sign in to view saved videos.')).toHaveLength(2);
+    expect(fetchMyVideoFeedback).not.toHaveBeenCalled();
+  });
+
+  it('shows Guest and a log in action in the profile menu for guests', () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed(null);
+    fireEvent.click(screen.getByText('Profile'));
     expect(screen.getByText('Guest')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
   });

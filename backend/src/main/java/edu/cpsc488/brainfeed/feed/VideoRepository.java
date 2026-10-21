@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-/** Reads and writes the {@code videos} table. */
+/** Reads and writes the {@code videos} and per-user video feedback tables. */
 public class VideoRepository {
 
     private final DataSource dataSource;
@@ -80,5 +80,58 @@ public class VideoRepository {
             throw new RuntimeException(e);
         }
         return videos;
+    }
+
+    /** Saves or clears a user's feedback. Returns false if the video isn't in the database. */
+    public boolean saveFeedback(long userId, String youtubeId, String feedback) {
+        String sql = """
+                INSERT INTO user_video_feedback (user_id, youtube_id, feedback)
+                SELECT ?, youtube_id, ? FROM videos WHERE youtube_id = ?
+                ON CONFLICT (user_id, youtube_id) DO UPDATE SET feedback = EXCLUDED.feedback
+                """;
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(feedback == null
+                     ? "DELETE FROM user_video_feedback WHERE user_id = ? AND youtube_id = ?"
+                     : sql)) {
+            ps.setLong(1, userId);
+            if (feedback == null) {
+                ps.setString(2, youtubeId);
+                ps.executeUpdate();
+                return true;
+            }
+            ps.setString(2, feedback);
+            ps.setString(3, youtubeId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Returns only this user's videos for the selected feedback value. */
+    public List<SavedVideo> findFeedback(long userId, String feedback) {
+        String sql = """
+                SELECT v.youtube_id, v.title, v.channel_title
+                FROM user_video_feedback f
+                JOIN videos v ON v.youtube_id = f.youtube_id
+                WHERE f.user_id = ? AND f.feedback = ?
+                ORDER BY lower(v.title), v.youtube_id
+                """;
+        List<SavedVideo> savedVideos = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, userId);
+            ps.setString(2, feedback);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    savedVideos.add(new SavedVideo(
+                            rs.getString("youtube_id"),
+                            rs.getString("title"),
+                            rs.getString("channel_title")));
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return savedVideos;
     }
 }

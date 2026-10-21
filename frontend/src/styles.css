@@ -325,11 +325,50 @@ form {
   object-position: center;
 }
 
-.feed-actions {
+.profile-menu {
+  position: relative;
+  font-size: 0.9rem;
+}
+
+.profile-menu summary {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  font-size: 0.9rem;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+
+.profile-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-chevron {
+  transition: transform 160ms ease;
+}
+
+.profile-menu[open] .profile-chevron {
+  transform: rotate(90deg);
+}
+
+.profile-menu-content {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: flex;
+  min-width: 9rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  text-align: right;
 }
 
 .feed-scroll-controls {
@@ -365,6 +404,77 @@ form {
 .feed-scroll-controls button:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
+}
+
+.leaderboard-page {
+  min-height: 100dvh;
+  padding: 1rem;
+}
+
+.leaderboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.leaderboard-panel {
+  min-height: 60vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.liked-videos-page {
+  min-height: 100dvh;
+  padding: 1rem;
+}
+
+.liked-videos-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.liked-videos-section + .liked-videos-section {
+  margin-top: 1.5rem;
+}
+
+.liked-videos-section h2 {
+  margin: 0 0 0.75rem;
+}
+
+.liked-videos-panel {
+  min-height: 24vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 0.75rem;
+}
+
+.liked-videos-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.liked-videos-table th,
+.liked-videos-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.liked-videos-table th {
+  font-weight: 600;
+}
+
+.leaderboard-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
 }
 
 /* Each video snaps to fill the screen, like other short-form video apps. */
