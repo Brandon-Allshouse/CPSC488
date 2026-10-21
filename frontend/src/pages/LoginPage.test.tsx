@@ -7,7 +7,7 @@ import LoginPage from './LoginPage';
 
 vi.mock('../api/auth', () => ({ login: vi.fn(), register: vi.fn() }));
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const onAuthenticated = vi.fn();
 const onGuest = vi.fn();
 

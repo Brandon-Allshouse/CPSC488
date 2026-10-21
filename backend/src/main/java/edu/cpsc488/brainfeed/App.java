@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
+import edu.cpsc488.brainfeed.admin.AdminController;
+import edu.cpsc488.brainfeed.admin.AdminRepository;
 import edu.cpsc488.brainfeed.auth.AuthController;
 import edu.cpsc488.brainfeed.auth.BreachedPasswordChecker;
 import edu.cpsc488.brainfeed.auth.PasswordHasher;
@@ -105,6 +107,7 @@ public class App {
             fetcher = refresher;
         }
         FeedController feed = new FeedController(topics, videos, auth, fetcher);
+        AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
 
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -141,6 +144,7 @@ public class App {
             config.routes.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
             auth.register(config.routes);
             feed.register(config.routes);
+            admin.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

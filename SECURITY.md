@@ -93,9 +93,23 @@ Browser ──HTTPS──▶ React frontend ──/api (same origin)──▶ Ja
 | Thumbs up/down are private and can't be tampered with | Feedback writes and reads require a session; the user comes from the session cookie, video ids are validated, and a database primary key enforces one choice per user/video. List queries filter on that session-derived user id. Guests are not allowed to save or view feedback |
 | Limit what the embedded player can do | Privacy-enhanced `youtube-nocookie.com` player, loaded only when the user presses play, in a `sandbox`ed iframe; the CSP allows only `www.youtube-nocookie.com` frames and `i.ytimg.com` images |
 
+### Admin access and bans (OWASP Top 10 A01, ASVS V4)
+
+| Requirement | Implementation |
+|---|---|
+| Only admins can use admin endpoints | A `before` handler on `/api/admin/*` checks the session and the `is_admin` flag on every request, including for endpoints added later. Each handler also refuses if that check didn't run. The frontend hides the Admin menu from non-admins, but that's only convenience |
+| No way to escalate privileges through the app | There's no endpoint that grants admin. It's set by hand in the database (README, "Admin accounts"). The flag is re-read on each request, so removing it works right away |
+| One admin can't lock out the others | Admins can't ban themselves or other admins; a DB `CHECK` (`users_admin_not_banned`) backs this up |
+| A ban takes effect immediately | Banning deletes all of the user's sessions in the same transaction, and `UserRepository.findById` ignores banned users, so an old cookie can't be used either |
+| Bans don't reveal which accounts exist or are banned | Login only says "suspended" after the correct password; a wrong password gets the usual generic message |
+| Banned videos stay gone | `banned_videos` is a blacklist that `VideoRepository.saveAll` checks, so YouTube refreshes can't bring a video back. Banning deletes the video and everyone's likes of it |
+| Admins are accountable | Every ban and unban is written to `admin_actions` (who, what, when, why) in the same transaction as the change, and to the `security` log. A reason is required, limited to 200 characters on one line |
+| Admin input is validated like any other | User ids must be positive numbers, video ids must match YouTube's format, and search text is length-capped with `%`, `_` and `\` escaped so they can't act as wildcards |
+
 ### Logging (OWASP Top 10 A09, OWASP Logging Cheat Sheet)
 
-Login, logout, registration, rate-limit and policy rejections are logged under the `security` logger
+Login, logout, registration, rate-limit and policy rejections, banned-account logins, refused
+admin access, and every admin ban or unban are logged under the `security` logger
 with the outcome, user id, IP and user agent. Passwords, tokens and email addresses are never logged,
 and control characters are stripped so user input can't forge log lines.
 
@@ -107,7 +121,7 @@ and control characters are stripped so user input can't forge log lines.
 | PS.1 Protect code and secrets | `.env` is gitignored; secrets come only from the environment |
 | PW.4 Reuse well-secured components | Maintained libraries only (Javalin, BouncyCastle, Flyway, HikariCP, pgJDBC) with pinned versions, on long-term support (LTS) releases of Java and Node |
 | PW.7 Review code | Security-relevant PRs are reviewed against this document; CodeQL runs on every PR |
-| PW.8 Test | Unit tests run in CI. Backend: hashing, password policy, breach-list matching, rate limiting, log sanitizing, email/username rules, pepper and `.env` loading, YouTube response handling, feed and feedback input checks, the YouTube search budget and new-topic fetching. Frontend: input validation, the API helper's CSRF header, and every page and component (including that YouTube titles and channel names render as plain text, the player is sandboxed, the feed stops checking for new videos after a minute or when the user leaves, and saved feedback appears in the user's lists). The endpoints themselves aren't tested against a real database yet (planned API tests) |
+| PW.8 Test | Unit tests run in CI. Backend: hashing, password policy, breach-list matching, rate limiting, log sanitizing, email/username rules, pepper and `.env` loading, YouTube response handling, feed and feedback input checks, admin input checks and ban rules (no banning yourself or other admins), the YouTube search budget and new-topic fetching. Frontend: input validation, the API helper's CSRF header, and every page and component (including that YouTube titles and channel names render as plain text, the player is sandboxed, the feed stops checking for new videos after a minute or when the user leaves, saved feedback appears in the user's lists, non-admins can't reach the admin page, bans need a reason, and pasted YouTube links are parsed safely). The endpoints themselves aren't tested against a real database yet (planned API tests) |
 | RV.1 Find vulnerabilities | Weekly Dependabot PRs (see "Dependency updates" in the README), `npm audit` in CI, and OWASP Dependency-Check run by hand (`mvn verify -P security-scan`) |
 
 ## Checklist for new features
@@ -146,3 +160,5 @@ Things we know aren't covered yet, and what would need to change:
 8. **The topic, interest, video feedback and feed endpoints have no rate limit.** They only do small, indexed database reads and single-row writes, so the risk is low. The feed can start YouTube searches for never-searched topics, but the 80-searches-a-day budget caps that, so a flood can't run up the quota. It could still load the database, or use up the day's budget so other users' new topics wait until tomorrow. Add a per-IP limit (like `LoginRateLimiter`) before any public deployment.
 9. **Embedded videos are third-party content.** We can't vet every video YouTube returns; safe search, the Education category and the topic queries are the only filters. Watching a video sends the viewer's IP to YouTube (Google), as with any embed.
 10. **pgAdmin is a local development tool only.** It gives full read and write access to the database, so it's locked down: it only starts with `--profile tools`, listens on `127.0.0.1` only, runs as a non-root user, and has its own login. It won't start without `PGADMIN_PASSWORD`, so there's no default password. Never deploy it or expose port 5050. On a shared server, use `psql` over SSH instead.
+11. **A banned person can make a new account.** Without email verification or a CAPTCHA (gaps 2 and 3), nothing stops someone signing up again with a different email. Bans stop the account, not the person. Email verification is what would make bans stick.
+12. **Admin accounts are the most valuable ones to steal.** An admin can see every user's email and ban anyone who isn't an admin, and admins log in with just a password like everyone else. Keep the number of admins small, use long unique passwords, and when MFA is added (gap 1), require it for admins first.

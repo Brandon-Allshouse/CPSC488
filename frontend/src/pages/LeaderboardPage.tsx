@@ -7,6 +7,7 @@ interface Props {
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
   onShowLeaderboard: () => void;
+  onShowAdmin?: () => void;
   onLogout: () => void;
 }
 
@@ -16,6 +17,7 @@ export default function LeaderboardPage({
   onEditInterests,
   onShowLikedVideos,
   onShowLeaderboard,
+  onShowAdmin,
   onLogout,
 }: Props) {
   return (
@@ -25,6 +27,7 @@ export default function LeaderboardPage({
         onEditInterests={onEditInterests}
         onShowLikedVideos={onShowLikedVideos}
         onShowLeaderboard={onShowLeaderboard}
+        onShowAdmin={onShowAdmin}
         onLogout={onLogout}
       />
       <main className="leaderboard-page">

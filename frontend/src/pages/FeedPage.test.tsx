@@ -11,13 +11,22 @@ import {
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import FeedPage from './FeedPage';
 
+// The admin page loads its own data; empty answers are enough to check the navigation.
+vi.mock('../api/admin', () => ({
+  fetchAdminStats: vi.fn().mockResolvedValue({ users: 0, bannedUsers: 0, admins: 1, videos: 0, bannedVideos: 0 }),
+  searchUsers: vi.fn().mockResolvedValue([]),
+  searchVideos: vi.fn().mockResolvedValue([]),
+  fetchBannedVideos: vi.fn().mockResolvedValue([]),
+  fetchAdminActions: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('../api/feed', () => ({
   fetchFeed: vi.fn(),
   fetchMyVideoFeedback: vi.fn(),
   saveMyVideoFeedback: vi.fn(),
 }));
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 
 function makeVideo(n: number): Video {
   return {
@@ -267,6 +276,19 @@ describe('FeedPage', () => {
     expect(screen.getByRole('button', { name: 'Update leaderboard' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(screen.getByRole('button', { name: 'Interests' })).toBeTruthy();
+  });
+
+  it('lets an admin open the admin page and come back', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed({ ...testUser, admin: true });
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
+
+    expect(screen.getByRole('heading', { name: 'Admin' })).toBeTruthy();
+    expect(await screen.findByText('No banned videos.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+    expect(screen.queryByRole('heading', { name: 'Admin' })).toBeNull();
   });
 
   it('shows the signed-in user liked and disliked videos and returns to the feed', async () => {

@@ -6,6 +6,8 @@ interface Props {
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
   onShowLeaderboard: () => void;
+  // Only admins see this menu item. The backend still checks on every admin request.
+  onShowAdmin?: () => void;
   onLogout: () => void;
 }
 
@@ -14,6 +16,7 @@ export default function FeedHeader({
   onEditInterests,
   onShowLikedVideos,
   onShowLeaderboard,
+  onShowAdmin,
   onLogout,
 }: Props) {
   return (
@@ -40,6 +43,11 @@ export default function FeedHeader({
           <button type="button" className="link-button" onClick={onShowLeaderboard}>
             Leaderboard
           </button>
+          {user?.admin && onShowAdmin && (
+            <button type="button" className="link-button" onClick={onShowAdmin}>
+              Admin
+            </button>
+          )}
           <button type="button" className="link-button" onClick={onLogout}>
             {user ? 'Sign out' : 'Log in'}
           </button>
