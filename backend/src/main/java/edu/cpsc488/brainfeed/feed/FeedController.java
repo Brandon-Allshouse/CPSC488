@@ -191,7 +191,7 @@ public class FeedController {
         return auth.currentUser(ctx).orElseThrow(() -> ApiException.unauthorized("Not logged in."));
     }
 
-    static String checkYoutubeId(String youtubeId) {
+    public static String checkYoutubeId(String youtubeId) {
         if (youtubeId == null || !YouTubeClient.VIDEO_ID.matcher(youtubeId).matches()) {
             throw ApiException.badRequest("Invalid video id.");
         }

@@ -10,6 +10,7 @@ interface Props {
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
   onShowLeaderboard: () => void;
+  onShowAdmin?: () => void;
   onLogout: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function LikedVideosPage({
   onEditInterests,
   onShowLikedVideos,
   onShowLeaderboard,
+  onShowAdmin,
   onLogout,
 }: Props) {
   const [feedback, setFeedback] = useState<MyVideoFeedback | null>(null);
@@ -106,6 +108,7 @@ export default function LikedVideosPage({
         onEditInterests={onEditInterests}
         onShowLikedVideos={onShowLikedVideos}
         onShowLeaderboard={onShowLeaderboard}
+        onShowAdmin={onShowAdmin}
         onLogout={onLogout}
       />
       <main className="liked-videos-page">

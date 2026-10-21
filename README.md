@@ -25,6 +25,7 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Less content from creators/channels you've marked as not interesting
 - Preferences and history saved for registered users
 - A random/discovery feed to branch out into new topics
+- Admin page: ban users, blacklist videos, and see a log of every admin action
 
 ## Stack (subject to change)
 
@@ -50,10 +51,11 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/java/.../App.java    entry point: settings, security headers, routes
   src/main/java/.../auth/       accounts, login sessions, password hashing
   src/main/java/.../feed/       topics, interests, video feed, YouTube client
+  src/main/java/.../admin/      admin page endpoints: user bans, video blacklist, admin action log
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, LeaderboardPage (placeholder)
+  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, LeaderboardPage (placeholder), AdminPage
   src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box),
                                 FeedHeader (logo and profile menu shared by the feed screens)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
@@ -225,6 +227,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Docker Desktop: "Virtualization support not detected" | Virtualization is turned off in your laptop's BIOS/UEFI settings. Search your laptop model + "enable virtualization". |
 | `env file ...\.env not found` or `Set DB_PASSWORD in .env` | `.env` is missing or misnamed. It must be in the `CPSC488` folder and named exactly `.env`. Check with `Get-ChildItem -Force .env`; Notepad sometimes saves it as `.env.txt`. |
 | Node reports `Unknown file extension ".tsx"` when you run a frontend test | Don't launch the test file with `node`. Run it through Vitest instead: `docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx` (the app must be running). |
+| pgAdmin: `failed to resolve host 'db'` (or the backend can't reach `db`) after pulling | Your containers are still on the old shared network from before the database got its own. Run `docker compose up -d` (and `docker compose --profile tools up -d pgadmin` if you use pgAdmin) to recreate them on the new networks. Your data and pgAdmin settings are kept. |
 | Backend: `DB_PASSWORD is not set` or `PASSWORD_PEPPER ...` | That value in `.env` is blank or invalid. Generate one as in step 1. |
 | Backend: `password authentication failed for user "..."` | `DB_PASSWORD` changed after the database was created. Reset the local database: `docker compose down -v`, then `docker compose up --build`. This erases local data. |
 | Database starts empty after pulling the PostgreSQL 18 upgrade | Expected: Postgres can't read data files from an older major version, so the database moved to a new volume and starts fresh. Sign up again. To free the old volume's disk space: `docker volume rm brainfeed_brainfeed-data`. |
@@ -427,8 +430,9 @@ All request and response bodies are JSON. Errors look like `{ "error": "message 
 | POST   | `/api/auth/logout`   | none                            | `204`, and ends the session                        |
 | GET    | `/api/auth/me`       | none                            | `200 { user }`, or `401` if not logged in          |
 
-`user` is `{ id, email, username, createdAt }`. Other error codes: `400` invalid input, `409` email or
-username taken, `429` too many attempts. Every POST and PUT must send `Content-Type: application/json`
+`user` is `{ id, email, username, createdAt, admin }`. Other error codes: `400` invalid input, `403`
+account banned (login only, and only after the right password), `409` email or username taken, `429`
+too many attempts. Every POST and PUT must send `Content-Type: application/json`
 (the frontend's `request()` helper in `api/client.ts` does this).
 
 ## Feed API
@@ -458,6 +462,39 @@ scrolling. Videos are served from our database (filled once a day per topic by `
 so browsing never spends YouTube quota. Video feedback requires a signed-in account and is private
 to that account. The feedback endpoint returns saved videos as `{ youtubeId, title, creator }`;
 guests are asked to log in before voting.
+
+## Admin API
+
+Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the user isn't an admin.
+
+| Method | Path                                    | Body / query      | Success response                                                     |
+|--------|-----------------------------------------|-------------------|----------------------------------------------------------------------|
+| GET    | `/api/admin/stats`                      | none              | `200 { users, bannedUsers, admins, videos, bannedVideos }`           |
+| GET    | `/api/admin/users`                      | `?q=text`         | `200 { users }`, up to 50 matching username or email, newest first   |
+| PUT    | `/api/admin/users/{id}/ban`             | `{ reason }`      | `204`; bans and logs them out everywhere. `400` for yourself or an admin |
+| DELETE | `/api/admin/users/{id}/ban`             | none              | `204`; `404` if they weren't banned                                  |
+| GET    | `/api/admin/videos`                     | `?q=text`         | `200 { videos }`, up to 50 matching title, channel or id             |
+| GET    | `/api/admin/banned-videos`              | none              | `200 { videos }`, newest ban first                                   |
+| PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
+| DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
+| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans and unbans                |
+
+A reason (1-200 characters, one line) is required for every ban. Banning a video works for any
+YouTube id, even one the feed hasn't fetched yet.
+
+### Admin accounts
+
+There's no button or endpoint that makes someone an admin, on purpose: that way a bug or a stolen
+session can't be used to hand out admin access. To make an account an admin, sign it up normally,
+then open psql (see "Looking at the database") and run:
+
+```sql
+UPDATE users SET is_admin = true WHERE username = 'testuser';
+```
+
+The change takes effect on that user's next request; reload the page and **Admin** appears in the
+Profile menu. Set it back to `false` the same way to remove access. An admin can't be banned, so
+remove admin access first if you ever need to.
 
 ## Security
 

@@ -29,7 +29,7 @@ vi.mock('./api/feed', () => ({
   saveMyVideoFeedback: vi.fn(),
 }));
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 
 beforeEach(() => {
   vi.clearAllMocks();

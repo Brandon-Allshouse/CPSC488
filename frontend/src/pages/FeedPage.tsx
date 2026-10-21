@@ -11,6 +11,7 @@ import {
 import brainLogo from '../assets/brainfeed-logo.png';
 import FeedHeader from '../components/FeedHeader';
 import VideoCard from '../components/VideoCard';
+import AdminPage from './AdminPage';
 import LeaderboardPage from './LeaderboardPage';
 import LikedVideosPage from './LikedVideosPage';
 
@@ -38,8 +39,8 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [showLikedVideos, setShowLikedVideos] = useState(false);
+  // Which screen is showing. FeedPage stays mounted, so the loaded videos are still there on the way back.
+  const [view, setView] = useState<'feed' | 'liked' | 'leaderboard' | 'admin'>('feed');
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -182,46 +183,19 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   const isEmpty = videos.length === 0 && nextPage === null && !loading && !error && !finding;
 
-  const showFeed = () => {
-    setShowLeaderboard(false);
-    setShowLikedVideos(false);
+  const navigation = {
+    user,
+    onBack: () => setView('feed'),
+    onEditInterests,
+    onShowLikedVideos: () => setView('liked'),
+    onShowLeaderboard: () => setView('leaderboard'),
+    onShowAdmin: () => setView('admin'),
+    onLogout,
   };
 
-  const showLeaderboardPage = () => {
-    setShowLikedVideos(false);
-    setShowLeaderboard(true);
-  };
-
-  const showLikedVideosPage = () => {
-    setShowLeaderboard(false);
-    setShowLikedVideos(true);
-  };
-
-  if (showLikedVideos) {
-    return (
-      <LikedVideosPage
-        user={user}
-        onBack={showFeed}
-        onEditInterests={onEditInterests}
-        onShowLikedVideos={showLikedVideosPage}
-        onShowLeaderboard={showLeaderboardPage}
-        onLogout={onLogout}
-      />
-    );
-  }
-
-  if (showLeaderboard) {
-    return (
-      <LeaderboardPage
-        user={user}
-        onBack={showFeed}
-        onEditInterests={onEditInterests}
-        onShowLikedVideos={showLikedVideosPage}
-        onShowLeaderboard={showLeaderboardPage}
-        onLogout={onLogout}
-      />
-    );
-  }
+  if (view === 'liked') return <LikedVideosPage {...navigation} />;
+  if (view === 'leaderboard') return <LeaderboardPage {...navigation} />;
+  if (view === 'admin') return <AdminPage {...navigation} />;
 
   return (
     <div className="feed-page">
@@ -229,8 +203,9 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       <FeedHeader
         user={user}
         onEditInterests={onEditInterests}
-        onShowLikedVideos={showLikedVideosPage}
-        onShowLeaderboard={showLeaderboardPage}
+        onShowLikedVideos={navigation.onShowLikedVideos}
+        onShowLeaderboard={navigation.onShowLeaderboard}
+        onShowAdmin={navigation.onShowAdmin}
         onLogout={onLogout}
       />
 

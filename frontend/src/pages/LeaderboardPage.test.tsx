@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LeaderboardPage from './LeaderboardPage';
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const handlers = {
   onBack: vi.fn(),
   onEditInterests: vi.fn(),
@@ -36,5 +36,13 @@ describe('LeaderboardPage', () => {
     fireEvent.click(screen.getByText('Profile'));
     fireEvent.click(screen.getByRole('button', { name: 'View Liked videos' }));
     expect(handlers.onShowLikedVideos).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the Admin page to admins from the profile menu', () => {
+    const onShowAdmin = vi.fn();
+    render(<LeaderboardPage user={{ ...testUser, admin: true }} {...handlers} onShowAdmin={onShowAdmin} />);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
+    expect(onShowAdmin).toHaveBeenCalledTimes(1);
   });
 });

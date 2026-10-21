@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchCurrentUser, login, logout, register } from './auth';
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 
 function fakeFetch(body: unknown, status = 200) {
   const fetchMock = vi.fn().mockResolvedValue(

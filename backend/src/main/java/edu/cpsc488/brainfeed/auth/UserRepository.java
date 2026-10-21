@@ -23,7 +23,7 @@ public class UserRepository {
      * A user plus their password hash. It's package-private, so only auth code can see password
      * hashes. Everything outside this package, including API responses, gets a plain {@link User}.
      */
-    record Credentials(User user, String passwordHash) {
+    record Credentials(User user, String passwordHash, boolean banned) {
     }
 
     private final DataSource dataSource;
@@ -32,8 +32,12 @@ public class UserRepository {
         this.dataSource = dataSource;
     }
 
+    /**
+     * Banned users are treated as missing, so a session that somehow outlived the ban still can't
+     * be used. Re-read on every request, so taking admin away or banning works right away.
+     */
     public Optional<User> findById(long id) {
-        return findCredentials("SELECT * FROM users WHERE id = ?", ps -> ps.setLong(1, id))
+        return findCredentials("SELECT * FROM users WHERE id = ? AND banned_at IS NULL", ps -> ps.setLong(1, id))
                 .map(Credentials::user);
     }
 
@@ -90,7 +94,8 @@ public class UserRepository {
                 if (!rs.next()) {
                     return Optional.empty();
                 }
-                return Optional.of(new Credentials(mapUser(rs), rs.getString("password_hash")));
+                return Optional.of(new Credentials(mapUser(rs), rs.getString("password_hash"),
+                        rs.getObject("banned_at") != null));
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -102,6 +107,7 @@ public class UserRepository {
                 rs.getLong("id"),
                 rs.getString("email"),
                 rs.getString("username"),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getObject("created_at", OffsetDateTime.class),
+                rs.getBoolean("is_admin"));
     }
 }

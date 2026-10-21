@@ -20,11 +20,15 @@ public class VideoRepository {
         this.dataSource = dataSource;
     }
 
-    /** Saves videos from a YouTube search. Videos we already have are left as they are. */
+    /**
+     * Saves videos from a YouTube search. Videos we already have are left as they are, and videos
+     * an admin banned are skipped, so a refresh can never bring them back.
+     */
     void saveAll(List<Video> videos) {
         String sql = """
                 INSERT INTO videos (youtube_id, topic_id, title, channel_title, published_at)
-                VALUES (?, ?, ?, ?, ?)
+                SELECT ?, ?, ?, ?, ?
+                WHERE NOT EXISTS (SELECT 1 FROM banned_videos WHERE youtube_id = ?)
                 ON CONFLICT (youtube_id) DO NOTHING
                 """;
         try (Connection conn = dataSource.getConnection();
@@ -35,6 +39,7 @@ public class VideoRepository {
                 ps.setString(3, v.title());
                 ps.setString(4, v.channelTitle());
                 ps.setObject(5, v.publishedAt());
+                ps.setString(6, v.youtubeId());
                 ps.addBatch();
             }
             ps.executeBatch();

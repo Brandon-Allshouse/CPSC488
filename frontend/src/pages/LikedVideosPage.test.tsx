@@ -7,7 +7,7 @@ import LikedVideosPage from './LikedVideosPage';
 
 vi.mock('../api/feed', () => ({ fetchMyVideoFeedback: vi.fn() }));
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const handlers = {
   onBack: vi.fn(),
   onEditInterests: vi.fn(),
@@ -93,5 +93,14 @@ describe('LikedVideosPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(handlers.onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the Admin page to admins from the profile menu', () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
+    const onShowAdmin = vi.fn();
+    render(<LikedVideosPage user={{ ...testUser, admin: true }} {...handlers} onShowAdmin={onShowAdmin} />);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
+    expect(onShowAdmin).toHaveBeenCalledTimes(1);
   });
 });
