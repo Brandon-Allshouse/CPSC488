@@ -20,6 +20,8 @@ import edu.cpsc488.brainfeed.feed.FeedRefresher;
 import edu.cpsc488.brainfeed.feed.TopicRepository;
 import edu.cpsc488.brainfeed.feed.VideoRepository;
 import edu.cpsc488.brainfeed.feed.YouTubeClient;
+import edu.cpsc488.brainfeed.history.WatchHistoryController;
+import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HandlerType;
@@ -112,6 +114,8 @@ public class App {
         }
         FeedController feed = new FeedController(topics, videos, auth, fetcher);
         AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
+        WatchHistoryController history = new WatchHistoryController(
+                new WatchHistoryRepository(dataSource, WatchHistoryController.LIMIT), auth);
 
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -151,6 +155,7 @@ public class App {
             auth.register(config.routes);
             feed.register(config.routes);
             admin.register(config.routes);
+            history.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

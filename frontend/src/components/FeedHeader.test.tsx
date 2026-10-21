@@ -120,4 +120,12 @@ describe('FeedHeader', () => {
     expect(home.tagName).toBe('BUTTON');
     expect(home.getAttribute('type')).toBe('button');
   });
+
+  it('has a Watch history item when the page offers one', () => {
+    const onShowHistory = vi.fn();
+    render(<FeedHeader user={testUser} {...handlers} onShowHistory={onShowHistory} />);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Watch history' }));
+    expect(onShowHistory).toHaveBeenCalledTimes(1);
+  });
 });

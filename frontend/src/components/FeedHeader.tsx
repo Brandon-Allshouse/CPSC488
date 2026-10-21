@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { BookOpen, ChevronDown, Heart, LogIn, LogOut, ShieldCheck, Trophy } from 'lucide-react';
+import { BookOpen, ChevronDown, Heart, History, LogIn, LogOut, ShieldCheck, Trophy } from 'lucide-react';
 import type { User } from '../api/auth';
 import brainLogo from '../assets/brainfeed-logo.png';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ interface Props {
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
   onShowLeaderboard: () => void;
+  onShowHistory?: () => void;
   // Only admins see this menu item. The backend still checks on every admin request.
   onShowAdmin?: () => void;
   onLogout: () => void;
@@ -46,6 +47,7 @@ export default function FeedHeader({
   onEditInterests,
   onShowLikedVideos,
   onShowLeaderboard,
+  onShowHistory,
   onShowAdmin,
   onLogout,
 }: Props) {
@@ -126,6 +128,11 @@ export default function FeedHeader({
           <MenuItem icon={<Heart />} onSelect={select(onShowLikedVideos)}>
             Liked videos
           </MenuItem>
+          {onShowHistory && (
+            <MenuItem icon={<History />} onSelect={select(onShowHistory)}>
+              Watch history
+            </MenuItem>
+          )}
           <MenuItem icon={<Trophy />} onSelect={select(onShowLeaderboard)}>
             Leaderboard
           </MenuItem>
