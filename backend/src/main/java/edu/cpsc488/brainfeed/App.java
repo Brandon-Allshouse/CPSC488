@@ -72,6 +72,9 @@ public class App {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
+        // Our own reverse proxies, whose X-Forwarded-For header says who the real client is (see
+        // ClientIp). Blank means nothing sits in front of the backend.
+        ClientIp clientIp = new ClientIp(settings.get("TRUSTED_PROXIES", ""));
 
         HikariDataSource dataSource = Database.connect(dbUrl, dbUser, dbPassword);
         Database.migrate(dataSource);
@@ -123,6 +126,8 @@ public class App {
             // endpoint (e.g. file upload) genuinely needs more.
             config.http.maxRequestSize = 16_384L;
             config.startup.showJavalinBanner = false;
+            // ctx.ip() everywhere (rate limits, security log, admin page) gives the real client.
+            config.contextResolver.ip = ctx -> clientIp.resolve(ctx.req().getRemoteAddr(), ctx.header("X-Forwarded-For"));
             // Don't advertise the server software and version to attackers.
             config.jetty.modifyHttpConfiguration(http -> http.setSendServerVersion(false));
 

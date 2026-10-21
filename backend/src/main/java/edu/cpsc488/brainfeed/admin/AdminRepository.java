@@ -1,5 +1,7 @@
 package edu.cpsc488.brainfeed.admin;
 
+import edu.cpsc488.brainfeed.ClientIp;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,9 +21,14 @@ import java.util.Optional;
  */
 public class AdminRepository {
 
-    /** A user as admins see them. Unlike {@code User}, includes whether and why they're banned. */
+    /**
+     * A user as admins see them. Unlike {@code User}, includes whether and why they're banned, and
+     * the IP addresses they signed up and last logged in from (null for accounts from before IPs
+     * were recorded).
+     */
     public record AdminUser(long id, String username, String email, OffsetDateTime createdAt, boolean admin,
-                            OffsetDateTime bannedAt, String banReason) {
+                            OffsetDateTime bannedAt, String banReason, String signupIp, String lastLoginIp,
+                            OffsetDateTime lastLoginAt) {
     }
 
     public record AdminVideo(String youtubeId, String title, String channelTitle, String topic) {
@@ -31,9 +38,15 @@ public class AdminRepository {
     public record BannedVideo(String youtubeId, String title, String reason, String bannedBy, OffsetDateTime bannedAt) {
     }
 
-    public record AdminAction(long id, String admin, String action, String target, String reason,
+    /** ip is where the admin did it from. */
+    public record AdminAction(long id, String admin, String action, String target, String reason, String ip,
                               OffsetDateTime createdAt) {
     }
+
+    // host() turns an INET into plain text like "192.0.2.1", without the "/32" Postgres would add.
+    private static final String USER_COLUMNS = """
+            id, username, email, created_at, is_admin, banned_at, ban_reason,
+            host(signup_ip) AS signup_ip, host(last_login_ip) AS last_login_ip, last_login_at""";
 
     public record Stats(long users, long bannedUsers, long admins, long videos, long bannedVideos) {
     }
@@ -56,23 +69,30 @@ public class AdminRepository {
                 rs.getLong("admins"), rs.getLong("videos"), rs.getLong("banned_videos"))).getFirst();
     }
 
-    /** Newest users first. {@code pattern} is a ready-made ILIKE pattern (see AdminController.likePattern). */
+    /**
+     * Newest users first, matching the username, the email, or either IP address, so admins can
+     * find other accounts from the same place. {@code pattern} is a ready-made ILIKE pattern (see
+     * AdminController.likePattern).
+     */
     public List<AdminUser> searchUsers(String pattern, int limit) {
-        String sql = """
-                SELECT id, username, email, created_at, is_admin, banned_at, ban_reason FROM users
+        String sql = "SELECT " + USER_COLUMNS + """
+
+                FROM users
                 WHERE username ILIKE ? ESCAPE '\\' OR email ILIKE ? ESCAPE '\\'
+                   OR host(signup_ip) ILIKE ? ESCAPE '\\' OR host(last_login_ip) ILIKE ? ESCAPE '\\'
                 ORDER BY created_at DESC, id DESC
                 LIMIT ?
                 """;
         return query(sql, ps -> {
-            ps.setString(1, pattern);
-            ps.setString(2, pattern);
-            ps.setInt(3, limit);
+            for (int i = 1; i <= 4; i++) {
+                ps.setString(i, pattern);
+            }
+            ps.setInt(5, limit);
         }, AdminRepository::mapUser);
     }
 
     public Optional<AdminUser> findUser(long id) {
-        String sql = "SELECT id, username, email, created_at, is_admin, banned_at, ban_reason FROM users WHERE id = ?";
+        String sql = "SELECT " + USER_COLUMNS + " FROM users WHERE id = ?";
         return query(sql, ps -> ps.setLong(1, id), AdminRepository::mapUser).stream().findFirst();
     }
 
@@ -80,7 +100,7 @@ public class AdminRepository {
      * Bans a user and logs them out everywhere by deleting their sessions. Returns false if the
      * user doesn't exist or is an admin (the database refuses to ban admins too).
      */
-    public boolean banUser(long adminId, long userId, String reason) {
+    public boolean banUser(long adminId, String adminIp, long userId, String reason) {
         return inTransaction(conn -> {
             int changed = update(conn, """
                     UPDATE users SET banned_at = now(), ban_reason = ?
@@ -93,13 +113,13 @@ public class AdminRepository {
                 return false;
             }
             update(conn, "DELETE FROM sessions WHERE user_id = ?", ps -> ps.setLong(1, userId));
-            logUserAction(conn, adminId, "ban_user", userId, reason);
+            logUserAction(conn, adminId, adminIp, "ban_user", userId, reason);
             return true;
         });
     }
 
     /** Returns false if the user doesn't exist or wasn't banned. */
-    public boolean unbanUser(long adminId, long userId) {
+    public boolean unbanUser(long adminId, String adminIp, long userId) {
         return inTransaction(conn -> {
             int changed = update(conn, """
                     UPDATE users SET banned_at = NULL, ban_reason = NULL
@@ -108,7 +128,7 @@ public class AdminRepository {
             if (changed == 0) {
                 return false;
             }
-            logUserAction(conn, adminId, "unban_user", userId, null);
+            logUserAction(conn, adminId, adminIp, "unban_user", userId, null);
             return true;
         });
     }
@@ -148,7 +168,7 @@ public class AdminRepository {
      * likes and dislikes of it. Works for videos we haven't fetched yet, too. Banning an
      * already-banned video just updates the reason.
      */
-    public void banVideo(long adminId, String youtubeId, String reason) {
+    public void banVideo(long adminId, String adminIp, String youtubeId, String reason) {
         inTransaction(conn -> {
             update(conn, """
                     INSERT INTO banned_videos (youtube_id, title, reason, banned_by)
@@ -161,7 +181,7 @@ public class AdminRepository {
                 ps.setLong(4, adminId);
             });
             update(conn, "DELETE FROM videos WHERE youtube_id = ?", ps -> ps.setString(1, youtubeId));
-            logAction(conn, adminId, "ban_video", youtubeId, reason);
+            logAction(conn, adminId, adminIp, "ban_video", youtubeId, reason);
             return true;
         });
     }
@@ -170,58 +190,65 @@ public class AdminRepository {
      * Takes a video off the blacklist. It isn't put back right away: it shows up again the next
      * time its topic is refreshed from YouTube. Returns false if it wasn't banned.
      */
-    public boolean unbanVideo(long adminId, String youtubeId) {
+    public boolean unbanVideo(long adminId, String adminIp, String youtubeId) {
         return inTransaction(conn -> {
             int changed = update(conn, "DELETE FROM banned_videos WHERE youtube_id = ?",
                     ps -> ps.setString(1, youtubeId));
             if (changed == 0) {
                 return false;
             }
-            logAction(conn, adminId, "unban_video", youtubeId, null);
+            logAction(conn, adminId, adminIp, "unban_video", youtubeId, null);
             return true;
         });
     }
 
     public List<AdminAction> recentActions(int limit) {
         String sql = """
-                SELECT a.id, u.username AS admin, a.action, a.target, a.reason, a.created_at
+                SELECT a.id, u.username AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at
                 FROM admin_actions a LEFT JOIN users u ON u.id = a.admin_id
                 ORDER BY a.created_at DESC, a.id DESC
                 LIMIT ?
                 """;
         return query(sql, ps -> ps.setInt(1, limit), rs -> new AdminAction(rs.getLong("id"),
                 rs.getString("admin"), rs.getString("action"), rs.getString("target"),
-                rs.getString("reason"), rs.getObject("created_at", OffsetDateTime.class)));
+                rs.getString("reason"), rs.getString("ip"), rs.getObject("created_at", OffsetDateTime.class)));
     }
 
-    private static void logAction(Connection conn, long adminId, String action, String target, String reason)
-            throws SQLException {
-        update(conn, "INSERT INTO admin_actions (admin_id, action, target, reason) VALUES (?, ?, ?, ?)", ps -> {
+    private static void logAction(Connection conn, long adminId, String adminIp, String action, String target,
+                                  String reason) throws SQLException {
+        update(conn, """
+                INSERT INTO admin_actions (admin_id, ip, action, target, reason)
+                VALUES (?, CAST(? AS inet), ?, ?, ?)
+                """, ps -> {
             ps.setLong(1, adminId);
-            ps.setString(2, action);
-            ps.setString(3, target);
-            ps.setString(4, reason);
+            ps.setString(2, ClientIp.normalize(adminIp));
+            ps.setString(3, action);
+            ps.setString(4, target);
+            ps.setString(5, reason);
         });
     }
 
     /** Logs the user as "username (#id)", so the log stays readable even if they're renamed. */
-    private static void logUserAction(Connection conn, long adminId, String action, long userId, String reason)
-            throws SQLException {
+    private static void logUserAction(Connection conn, long adminId, String adminIp, String action, long userId,
+                                      String reason) throws SQLException {
         update(conn, """
-                INSERT INTO admin_actions (admin_id, action, target, reason)
-                SELECT ?, ?, username || ' (#' || id || ')', ? FROM users WHERE id = ?
+                INSERT INTO admin_actions (admin_id, ip, action, target, reason)
+                SELECT ?, CAST(? AS inet), ?, username || ' (#' || id || ')', ? FROM users WHERE id = ?
                 """, ps -> {
             ps.setLong(1, adminId);
-            ps.setString(2, action);
-            ps.setString(3, reason);
-            ps.setLong(4, userId);
+            ps.setString(2, ClientIp.normalize(adminIp));
+            ps.setString(3, action);
+            ps.setString(4, reason);
+            ps.setLong(5, userId);
         });
     }
 
     private static AdminUser mapUser(ResultSet rs) throws SQLException {
         return new AdminUser(rs.getLong("id"), rs.getString("username"), rs.getString("email"),
                 rs.getObject("created_at", OffsetDateTime.class), rs.getBoolean("is_admin"),
-                rs.getObject("banned_at", OffsetDateTime.class), rs.getString("ban_reason"));
+                rs.getObject("banned_at", OffsetDateTime.class), rs.getString("ban_reason"),
+                rs.getString("signup_ip"), rs.getString("last_login_ip"),
+                rs.getObject("last_login_at", OffsetDateTime.class));
     }
 
     /** Fills in a statement's {@code ?} placeholders. Like a lambda, but allowed to throw SQLException. */

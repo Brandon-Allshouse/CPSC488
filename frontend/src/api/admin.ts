@@ -19,6 +19,11 @@ export interface AdminUser {
   admin: boolean;
   bannedAt: string | null;
   banReason: string | null;
+  // Where the account was created and last logged in from. null for accounts from before IPs
+  // were recorded. Personal data: only admins ever get these.
+  signupIp: string | null;
+  lastLoginIp: string | null;
+  lastLoginAt: string | null;
 }
 
 export interface AdminVideo {
@@ -44,6 +49,8 @@ export interface AdminAction {
   action: 'ban_user' | 'unban_user' | 'ban_video' | 'unban_video';
   target: string;
   reason: string | null;
+  // where the admin did it from
+  ip: string | null;
   createdAt: string;
 }
 

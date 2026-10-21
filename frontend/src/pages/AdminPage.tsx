@@ -142,6 +142,17 @@ function SearchForm({ label, placeholder, value, onChange, onSubmit }: {
   );
 }
 
+// A date with the IP address it came from underneath. Either can be missing for accounts created
+// before IPs were recorded.
+function DateAndIp({ date, ip }: { date: string | null; ip: string | null }) {
+  return (
+    <div className="flex flex-col gap-0.5 whitespace-nowrap">
+      <span className="text-muted-foreground">{date ? formatDate(date) : 'Never'}</span>
+      <span className="font-mono text-xs text-muted-foreground/80">{ip ?? 'Unknown IP'}</span>
+    </div>
+  );
+}
+
 function EmptyRow({ columns, children }: { columns: number; children: ReactNode }) {
   return (
     <TableRow>
@@ -291,10 +302,15 @@ export default function AdminPage(navigation: PageNavigation) {
         </dl>
       </AdminSection>
 
-      <AdminSection id="admin-users" title="Users" icon={<Users />} description="Banning logs the user out everywhere and blocks their login.">
+      <AdminSection
+        id="admin-users"
+        title="Users"
+        icon={<Users />}
+        description="Banning logs the user out everywhere and blocks their login. Search by IP to find other accounts from the same place."
+      >
         <SearchForm
           label="Search users"
-          placeholder="Username or email"
+          placeholder="Username, email or IP address"
           value={userSearch}
           onChange={setUserSearch}
           onSubmit={submitUserSearch}
@@ -305,17 +321,23 @@ export default function AdminPage(navigation: PageNavigation) {
               <TableHead scope="col">Username</TableHead>
               <TableHead scope="col">Email</TableHead>
               <TableHead scope="col">Joined</TableHead>
+              <TableHead scope="col">Last login</TableHead>
               <TableHead scope="col">Status</TableHead>
               <TableHead scope="col" className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.length === 0 && <EmptyRow columns={5}>No users found.</EmptyRow>}
+            {users.length === 0 && <EmptyRow columns={6}>No users found.</EmptyRow>}
             {users.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">{row.username}</TableCell>
                 <TableCell className="text-muted-foreground">{row.email}</TableCell>
-                <TableCell className="text-muted-foreground">{formatDate(row.createdAt)}</TableCell>
+                <TableCell>
+                  <DateAndIp date={row.createdAt} ip={row.signupIp} />
+                </TableCell>
+                <TableCell>
+                  <DateAndIp date={row.lastLoginAt} ip={row.lastLoginIp} />
+                </TableCell>
                 <TableCell>
                   {row.admin ? (
                     <Badge>Admin</Badge>
@@ -492,11 +514,12 @@ export default function AdminPage(navigation: PageNavigation) {
               <TableHead scope="col">Admin</TableHead>
               <TableHead scope="col">Action</TableHead>
               <TableHead scope="col">Target</TableHead>
+              <TableHead scope="col">IP</TableHead>
               <TableHead scope="col">Reason</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {actions.length === 0 && <EmptyRow columns={5}>Nothing yet.</EmptyRow>}
+            {actions.length === 0 && <EmptyRow columns={6}>Nothing yet.</EmptyRow>}
             {actions.map((entry) => (
               <TableRow key={entry.id}>
                 <TableCell className="text-muted-foreground">{formatDate(entry.createdAt)}</TableCell>
@@ -507,6 +530,7 @@ export default function AdminPage(navigation: PageNavigation) {
                   </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{entry.target}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{entry.ip ?? 'Unknown'}</TableCell>
                 <TableCell>{entry.reason ?? ''}</TableCell>
               </TableRow>
             ))}

@@ -43,6 +43,9 @@ services:
       # ...except the database address: inside Docker, the database is reached by its service
       # name "db", not "localhost".
       DB_URL: jdbc:postgresql://db:5432/brainfeed
+      # Browsers reach the backend through the Vite dev server in the "frontend" container, so it's
+      # the one proxy whose X-Forwarded-For header is believed (see ClientIp.java).
+      TRUSTED_PROXIES: frontend
     depends_on:
       db:
         condition: service_healthy

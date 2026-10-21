@@ -105,7 +105,7 @@ public class AuthController {
             throw ApiException.badRequest(passwordProblem.get());
         }
 
-        User user = users.create(email, username, hasher.hash(password));
+        User user = users.create(email, username, hasher.hash(password), ctx.ip());
         SecurityLog.success("register", ctx, user.id());
         startSession(ctx, user);
         ctx.status(201).json(Map.of("user", user));
@@ -169,6 +169,7 @@ public class AuthController {
         }
 
         User user = found.get().user();
+        users.recordLogin(user.id(), ctx.ip());
         SecurityLog.success("login", ctx, user.id());
         startSession(ctx, user);
         ctx.json(Map.of("user", user));
