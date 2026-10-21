@@ -4,6 +4,10 @@ import { fetchMyInterests, saveMyInterests } from './api/feed';
 import LoginPage from './pages/LoginPage';
 import InterestsPage from './pages/InterestsPage';
 import FeedPage from './pages/FeedPage';
+import AdminPage from './pages/AdminPage';
+
+//temp hardcode for admin for class demo
+const ADMIN_USERNAMES=['BFAdmin'];
 
 // Who is using the app right now. Decides which page is shown.
 type Session =
@@ -18,6 +22,7 @@ export default function App() {
   // Guests' interests only live here, so they're gone after a page reload.
   const [interests, setInterests] = useState<number[] | null>(null);
   const [editingInterests, setEditingInterests] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   function startUserSession(user: User) {
     setSession({ kind: 'user', user });
@@ -44,6 +49,7 @@ export default function App() {
     setSession({ kind: 'anonymous' });
     setInterests(null);
     setEditingInterests(false);
+    setShowAdmin(false);
   }
 
   async function handleSaveInterests(topicIds: number[]) {
@@ -72,6 +78,9 @@ export default function App() {
       if (interests === null) {
         return <div className="center-screen muted">Loading…</div>;
       }
+      if (showAdmin && user && ADMIN_USERNAMES.includes(user.username)) {                
+        return <AdminPage adminName={user.username} onBack={() => setShowAdmin(false)} />; 
+      } 
       if (editingInterests || interests.length === 0) {
         return (
           <InterestsPage
@@ -90,6 +99,8 @@ export default function App() {
           user={user}
           onEditInterests={() => setEditingInterests(true)}
           onLogout={handleLogout}
+          onOpenAdmin={user && ADMIN_USERNAMES.includes(user.username) ? () => setShowAdmin(true) : undefined} // ← ADMIN (line 2)
+
         />
       );
     }

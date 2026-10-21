@@ -13,11 +13,12 @@ interface Props {
   user: User | null;
   onEditInterests: () => void;
   onLogout: () => void;
+  onOpenAdmin?: () => void;
 }
 
 // The scrolling video feed. Loads 10 videos at a time as the user nears the bottom.
 // App.tsx remounts this page when the interests change, which starts a fresh feed.
-export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: Props) {
+export default function FeedPage({ topicIds, user, onEditInterests, onLogout, onOpenAdmin }: Props) {
   // A random seed per visit gives a new shuffle each time, but stays fixed while scrolling so
   // pages don't repeat videos.
   const [seed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
@@ -107,6 +108,11 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
         </div>
         <div className="feed-actions">
           <span className="muted feed-user">{user ? user.username : 'Guest'}</span>
+              {onOpenAdmin && (
+              <button type="button" className="link-button" onClick={onOpenAdmin}>
+                Admin
+              </button>
+            )}
           <button type="button" className="link-button" onClick={onEditInterests}>
             Interests
           </button>

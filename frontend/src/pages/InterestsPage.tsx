@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
 import brainLogo from '../assets/brainfeed-logo.png';
+import LanguageSelect from '../components/LanguageSelect';
 
 interface Props {
   /** Topic ids that start out selected. */
@@ -38,6 +39,11 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
     });
   }
 
+  const subjectIds = topics ? topics.filter((topic) => topic.parentId === null).map((topic) => topic.id) : [];
+  const allSelected = subjectIds.length > 0 && subjectIds.every((id) => selected.has(id));
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(subjectIds));
+  }
   async function handleSave() {
     setError(null);
     setSaving(true);
@@ -64,6 +70,15 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
         </header>
 
         {topics === null && !error && <p className="muted">Loading topics…</p>}
+
+        {topics && (
+          <div className="interests-toolbar">
+            <LanguageSelect />
+            <button type="button" className="btn btn-secondary select-all-button" onClick={toggleAll}>
+              {allSelected ? 'Clear all' : 'Select all subjects'}
+            </button>
+          </div>
+        )}
 
         {topics && (
           <div className="subject-list">
