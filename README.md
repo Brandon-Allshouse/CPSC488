@@ -39,7 +39,9 @@ Browser ──▶ React frontend (localhost:5173) ──/api──▶ Javalin ba
 ```
 
 The frontend never talks to the database. Postgres only accepts connections from your own machine, and
-only the backend has its password.
+only the backend has its password. Docker enforces this too: the database and backend share one
+network (`data`) and the backend and frontend share another (`web`), so the frontend container
+can't even reach the database. Keep new frontend code going through `/api`.
 
 ## Project layout
 
@@ -51,8 +53,9 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage
-  src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box)
+  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, LeaderboardPage (placeholder)
+  src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box),
+                                FeedHeader (logo and profile menu shared by the feed screens)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
@@ -231,6 +234,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
 | `Too many failed login attempts` while testing | The limits are kept in memory. Run `docker compose restart backend`. |
 | Sign-up hangs a few seconds with no internet | The breached-password check is timing out. Set `PASSWORD_BREACH_CHECK=false` in `.env` while offline, and restart. |
+| http://localhost:5050 (pgAdmin) won't load | pgAdmin doesn't start with a plain `docker compose up`. Run `docker compose --profile tools up -d pgadmin` and wait about 20 seconds. If it still won't load, `docker compose logs pgadmin` says why (usually `PGADMIN_PASSWORD` is blank in `.env`). |
 
 ### Optional: running without Docker (for IDE debugging)
 

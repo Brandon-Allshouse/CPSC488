@@ -97,6 +97,9 @@ class FeedControllerTest {
         assertEquals("dQw4w9WgXcQ", FeedController.checkYoutubeId("dQw4w9WgXcQ"));
         assertBadRequest(() -> FeedController.checkYoutubeId("short"));
         assertBadRequest(() -> FeedController.checkYoutubeId("dQw4w9WgXc!"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("dQw4w9WgXcQQ"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("../../users"));
+        assertBadRequest(() -> FeedController.checkYoutubeId(null));
     }
 
     @Test

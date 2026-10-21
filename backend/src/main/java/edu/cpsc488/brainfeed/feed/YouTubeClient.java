@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 public class YouTubeClient {
 
     private static final String SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
-    private static final Pattern VIDEO_ID = Pattern.compile("^[A-Za-z0-9_-]{11}$");
+    static final Pattern VIDEO_ID = Pattern.compile("^[A-Za-z0-9_-]{11}$");
     static final int MAX_TITLE = 300;
     static final int MAX_CHANNEL = 200;
 
