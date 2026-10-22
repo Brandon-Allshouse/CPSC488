@@ -43,6 +43,8 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
     });
   }
 
+  // Picking a subject already includes all of its sub-subjects (see VideoRepository.page), so
+  // "Select all" only needs the subjects. It replaces any sub-subject picks, which are covered anyway.
   const subjectIds = topics ? topics.filter((topic) => topic.parentId === null).map((topic) => topic.id) : [];
   const allSelected = subjectIds.length > 0 && subjectIds.every((id) => selected.has(id));
 
@@ -83,7 +85,6 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
       )}
       {topics === null && !error && <p className="text-sm text-muted-foreground">Loading topics…</p>}
 
-      
       {topics && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <LanguageSelect />
