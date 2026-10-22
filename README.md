@@ -19,7 +19,8 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 ## Features
 
 - Sign up for an account, or just browse as a guest
-- Pick interests up front, change them whenever: a whole subject (Math) or just part of it (Algebra 2)
+- Pick interests up front, change them whenever: a whole subject (Math), just part of it (Algebra 2),
+  or every subject at once with "Select all subjects"
 - Scrollable feed of educational videos
 - Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
   videos where clicking a title takes you back to that video in your feed
@@ -61,7 +62,8 @@ frontend/                     React app (Vite project)
   src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
   src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
   src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
-  src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu)
+  src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
+                                LanguageSelect (language picker on the interests page; UI only for now)
   src/index.css                 color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
