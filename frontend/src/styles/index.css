@@ -4,7 +4,7 @@
  *
  * Colors follow the shadcn/ui naming (background, card, primary, muted, ...), so components copied
  * from ui.shadcn.com pick up our theme without changes. To restyle the app, change the variables
- * in :root, not the components.
+ * in :root (light) and .dark, not the components.
  */
 @import 'tailwindcss';
 @import '@fontsource-variable/inter';
@@ -38,29 +38,62 @@
   --animate-pop: pop 0.25s ease-out;
 }
 
-/* Dark theme only, matching the video-first look of the feed. */
+/* Lets Tailwind's dark: prefix follow our .dark class instead of the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Light theme is the default: high contrast so it's readable on a projector or from across a room.
+ * Dark text on near-white, a deeper blue so it still stands out against white.
+ */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --radius: 0.75rem;
-  --background: oklch(0.16 0.01 265);
-  --foreground: oklch(0.96 0.005 265);
-  --card: oklch(0.205 0.012 265);
-  --card-foreground: oklch(0.96 0.005 265);
-  --popover: oklch(0.22 0.012 265);
-  --popover-foreground: oklch(0.96 0.005 265);
-  --primary: oklch(0.64 0.18 262);
+  --background: oklch(0.985 0.003 265);
+  --foreground: oklch(0.2 0.02 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.02 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.02 265);
+  --primary: oklch(0.52 0.2 262);
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.27 0.014 265);
-  --secondary-foreground: oklch(0.96 0.005 265);
-  --muted: oklch(0.27 0.014 265);
-  --muted-foreground: oklch(0.72 0.015 265);
-  --accent: oklch(0.3 0.02 265);
+  --secondary: oklch(0.95 0.008 265);
+  --secondary-foreground: oklch(0.25 0.02 265);
+  --muted: oklch(0.95 0.008 265);
+  --muted-foreground: oklch(0.45 0.02 265);
+  --accent: oklch(0.93 0.018 265);
+  --accent-foreground: oklch(0.2 0.02 265);
+  --destructive: oklch(0.55 0.22 25);
+  --success: oklch(0.52 0.15 155);
+  --border: oklch(0.87 0.01 265);
+  --input: oklch(0.8 0.012 265);
+  --ring: oklch(0.52 0.2 262);
+}
+
+/*
+ * Dark theme, turned on by the toggle in the header. Lifted off near-black and with brighter
+ * secondary text and borders than before, so it's still easy to read.
+ */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.2 0.015 265);
+  --foreground: oklch(0.97 0.005 265);
+  --card: oklch(0.25 0.017 265);
+  --card-foreground: oklch(0.97 0.005 265);
+  --popover: oklch(0.27 0.017 265);
+  --popover-foreground: oklch(0.97 0.005 265);
+  --primary: oklch(0.72 0.15 262);
+  --primary-foreground: oklch(0.18 0.03 265);
+  --secondary: oklch(0.31 0.018 265);
+  --secondary-foreground: oklch(0.97 0.005 265);
+  --muted: oklch(0.31 0.018 265);
+  --muted-foreground: oklch(0.8 0.015 265);
+  --accent: oklch(0.34 0.022 265);
   --accent-foreground: oklch(0.98 0 0);
-  --destructive: oklch(0.66 0.2 22);
-  --success: oklch(0.74 0.15 155);
-  --border: oklch(0.32 0.014 265);
-  --input: oklch(0.34 0.014 265);
-  --ring: oklch(0.64 0.18 262);
+  --destructive: oklch(0.68 0.19 22);
+  --success: oklch(0.78 0.15 155);
+  --border: oklch(0.38 0.018 265);
+  --input: oklch(0.42 0.018 265);
+  --ring: oklch(0.72 0.15 262);
 }
 
 @layer base {
@@ -74,7 +107,7 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.55;
     letter-spacing: -0.005em;
     -webkit-font-smoothing: antialiased;

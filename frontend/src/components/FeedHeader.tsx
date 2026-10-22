@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, Heart, History, LogIn, LogOut, ShieldCheck, Trop
 import type { User } from '../api/auth';
 import brainLogo from '../assets/brainfeed-logo.png';
 import { cn } from '@/lib/utils';
+import ThemeToggle from './ThemeToggle';
 
 interface Props {
   user: User | null;
@@ -101,56 +102,59 @@ export default function FeedHeader({
         <span className="brand text-lg font-bold tracking-tight">BrainFeed</span>
       </button>
 
-      <details ref={menuRef} className="profile-menu group relative">
-        <summary className="flex cursor-pointer items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-1 text-sm font-medium transition-colors duration-150 select-none hover:bg-accent">
-          <span
-            aria-hidden="true"
-            className="flex size-7 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary uppercase"
-          >
-            {user ? user.username.charAt(0) : '?'}
-          </span>
-          Profile
-          <ChevronDown
-            aria-hidden="true"
-            className="profile-chevron size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
-          />
-        </summary>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <details ref={menuRef} className="profile-menu group relative">
+          <summary className="flex cursor-pointer items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-1 text-sm font-medium transition-colors duration-150 select-none hover:bg-accent">
+            <span
+              aria-hidden="true"
+              className="flex size-7 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary uppercase"
+            >
+              {user ? user.username.charAt(0) : '?'}
+            </span>
+            Profile
+            <ChevronDown
+              aria-hidden="true"
+              className="profile-chevron size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+            />
+          </summary>
 
-        <div className="profile-menu-content absolute right-0 z-30 mt-2 w-56 animate-fade-in-up rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-xl">
-          <div className="px-2.5 pt-1.5 pb-2">
-            <p className="text-xs text-muted-foreground">{user ? 'Signed in as' : 'Browsing as'}</p>
-            <span className="text-sm font-semibold">{user ? user.username : 'Guest'}</span>
+          <div className="profile-menu-content absolute right-0 z-30 mt-2 w-56 animate-fade-in-up rounded-lg border bg-popover p-1.5 text-popover-foreground shadow-xl">
+            <div className="px-2.5 pt-1.5 pb-2">
+              <p className="text-xs text-muted-foreground">{user ? 'Signed in as' : 'Browsing as'}</p>
+              <span className="text-sm font-semibold">{user ? user.username : 'Guest'}</span>
+            </div>
+            <div className="my-1 h-px bg-border" />
+            <MenuItem icon={<BookOpen />} onSelect={select(onEditInterests)}>
+              Interests
+            </MenuItem>
+            <MenuItem icon={<Heart />} onSelect={select(onShowLikedVideos)}>
+              Your videos
+            </MenuItem>
+            {onShowHistory && (
+              <MenuItem icon={<History />} onSelect={select(onShowHistory)}>
+                Watch history
+              </MenuItem>
+            )}
+            <MenuItem icon={<Trophy />} onSelect={select(onShowLeaderboard)}>
+              Leaderboard
+            </MenuItem>
+            {user?.admin && onShowAdmin && (
+              <MenuItem icon={<ShieldCheck />} onSelect={select(onShowAdmin)}>
+                Admin
+              </MenuItem>
+            )}
+            <div className="my-1 h-px bg-border" />
+            <MenuItem
+              icon={user ? <LogOut /> : <LogIn />}
+              onSelect={select(onLogout)}
+              className={user ? 'text-destructive [&_svg]:text-destructive' : undefined}
+            >
+              {user ? 'Sign out' : 'Log in'}
+            </MenuItem>
           </div>
-          <div className="my-1 h-px bg-border" />
-          <MenuItem icon={<BookOpen />} onSelect={select(onEditInterests)}>
-            Interests
-          </MenuItem>
-          <MenuItem icon={<Heart />} onSelect={select(onShowLikedVideos)}>
-            Your videos
-          </MenuItem>
-          {onShowHistory && (
-            <MenuItem icon={<History />} onSelect={select(onShowHistory)}>
-              Watch history
-            </MenuItem>
-          )}
-          <MenuItem icon={<Trophy />} onSelect={select(onShowLeaderboard)}>
-            Leaderboard
-          </MenuItem>
-          {user?.admin && onShowAdmin && (
-            <MenuItem icon={<ShieldCheck />} onSelect={select(onShowAdmin)}>
-              Admin
-            </MenuItem>
-          )}
-          <div className="my-1 h-px bg-border" />
-          <MenuItem
-            icon={user ? <LogOut /> : <LogIn />}
-            onSelect={select(onLogout)}
-            className={user ? 'text-destructive [&_svg]:text-destructive' : undefined}
-          >
-            {user ? 'Sign out' : 'Log in'}
-          </MenuItem>
-        </div>
-      </details>
+        </details>
+      </div>
     </header>
   );
 }
