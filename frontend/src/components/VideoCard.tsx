@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
+import type { Playlist } from '../api/playlists';
 import { cn } from '@/lib/utils';
-import type { Playlist} from '../api/playlists';
 import SaveMenu from './SaveMenu';
 
 // youtube-nocookie.com is YouTube's "privacy mode" player, which doesn't set tracking cookies
@@ -18,8 +18,11 @@ interface Props {
   highlighted?: boolean;
   /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
   onPlay?: (youtubeId: string) => void;
+  /** The user's playlists, for the Save button. Leave the three save props out to hide it (guests). */
   playlists?: Playlist[];
-  onToggleSaved?: (youtubeId: string, playlistID: number, save:boolean) => Promise<void>;
+  /** Adds the video to a playlist (save true) or removes it. Throws on failure. */
+  onToggleSaved?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
+  /** Makes a new playlist with this video in it. Throws on failure (e.g. name taken). */
   onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
 }
 
@@ -65,7 +68,16 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ video, feedback, onFeedbackChange, highlighted = false, onPlay, playlists, onToggleSaved, onCreatePlaylist }: Props) {
+export default function VideoCard({
+  video,
+  feedback,
+  onFeedbackChange,
+  highlighted = false,
+  onPlay,
+  playlists,
+  onToggleSaved,
+  onCreatePlaylist,
+}: Props) {
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
