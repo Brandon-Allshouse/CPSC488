@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Playlist } from '../api/playlists';
 import SaveMenu from './SaveMenu';
@@ -78,4 +78,74 @@ describe('SaveMenu', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('saves to the notebook without touching playlists', async () => {
+    const notebookToggle = vi.fn().mockResolvedValue(undefined);
+    const props = renderMenu({ notebook: { saved: false, onToggle: notebookToggle } });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved. Change save locations' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Study notebook' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Added to Study notebook.'));
+    expect(notebookToggle).toHaveBeenCalledTimes(1);
+    expect(props.onToggle).not.toHaveBeenCalled();
+    expect(props.onCreate).not.toHaveBeenCalled();
+  });
+
+  it('supports the notebook on a card with no playlist controls', () => {
+    renderMenu({ notebook: { saved: true, onToggle: vi.fn() }, playlists: undefined });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved. Change save locations' }));
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' }).checked).toBe(true);
+    expect(screen.queryByRole('textbox', { name: 'New playlist name' })).toBeNull();
+  });
+
+  it('disables destinations during a pending request and sends only one save', async () => {
+    let finish!: () => void;
+    const notebookToggle = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderMenu({ notebook: { saved: false, onToggle: notebookToggle } });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved. Change save locations' }));
+    const notebook = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' });
+    fireEvent.click(notebook);
+    fireEvent.click(notebook);
+    expect(notebook.disabled).toBe(true);
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Watch later' }).disabled).toBe(true);
+    expect(screen.getByRole('status').textContent).toBe('Saving changes...');
+    expect(notebookToggle).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); });
+    expect(notebook.disabled).toBe(false);
+  });
+
+  it('keeps the saved state unchanged and lets the user retry after a failed notebook save', async () => {
+    const notebookToggle = vi.fn()
+      .mockRejectedValueOnce(new Error('Please try again.'))
+      .mockResolvedValue(undefined);
+    const props = renderMenu({ notebook: { saved: false, onToggle: notebookToggle } });
+    fireEvent.click(screen.getByRole('button', { name: 'Saved. Change save locations' }));
+    const notebook = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' });
+    fireEvent.click(notebook);
+    expect((await screen.findByRole('alert')).textContent).toBe('Please try again.');
+    expect(notebook.checked).toBe(false);
+    expect(notebook.disabled).toBe(false);
+    fireEvent.click(notebook);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Added to Study notebook.'));
+    expect(notebookToggle).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(props.onToggle).not.toHaveBeenCalled();
+  });
+
+  it('focuses a destination on open and returns focus to the bookmark on Escape', () => {
+    renderMenu({ notebook: { saved: false, onToggle: vi.fn() } });
+    const trigger = screen.getByRole('button', { name: 'Saved. Change save locations' });
+    fireEvent.click(trigger);
+    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Study notebook' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('closes when the user clicks outside the save menu', () => {
+    renderMenu();
+    fireEvent.click(screen.getByRole('button', { name: 'Saved. Change playlists' }));
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
 });

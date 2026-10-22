@@ -12,16 +12,20 @@ const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 
 interface Props {
   video: FeedVideo;
-  feedback: VideoFeedback | null;
-  onFeedbackChange: (youtubeId: string, feedback: VideoFeedback | null) => Promise<void>;
+  saved?: boolean;
+  canSave?: boolean;
+  /** The original private saved-video list, separate from playlists. */
+  onToggleSaved?: (video: FeedVideo) => void | Promise<void>;
+  feedback?: VideoFeedback | null;
+  onFeedbackChange?: (youtubeId: string, feedback: VideoFeedback | null) => Promise<void>;
   /** Outlines the card, to show which video was just opened from "Your videos". */
   highlighted?: boolean;
   /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
   onPlay?: (youtubeId: string) => void;
-  /** The user's playlists, for the Save button. Leave the three save props out to hide it (guests). */
+  /** The user's playlists, for the bookmark menu. Leave the three playlist props out to hide it. */
   playlists?: Playlist[];
   /** Adds the video to a playlist (save true) or removes it. Throws on failure. */
-  onToggleSaved?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
+  onTogglePlaylist?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
   /** Makes a new playlist with this video in it. Throws on failure (e.g. name taken). */
   onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
 }
@@ -70,14 +74,19 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
 export default function VideoCard({
   video,
-  feedback,
+  saved = false,
+  canSave = false,
+  onToggleSaved,
+  feedback = null,
   onFeedbackChange,
   highlighted = false,
   onPlay,
   playlists,
-  onToggleSaved,
+  onTogglePlaylist,
   onCreatePlaylist,
 }: Props) {
+  const notebook = canSave && onToggleSaved ? { saved, onToggle: () => onToggleSaved(video) } : undefined;
+  const canUsePlaylists = playlists !== undefined && onTogglePlaylist !== undefined && onCreatePlaylist !== undefined;
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -100,6 +109,7 @@ export default function VideoCard({
   const id = encodeURIComponent(video.youtubeId);
 
   async function changeFeedback(next: VideoFeedback | null) {
+    if (!onFeedbackChange) return;
     setSavingFeedback(true);
     try {
       await onFeedbackChange(video.youtubeId, next);
@@ -162,32 +172,37 @@ export default function VideoCard({
 
       <section className="video-summary flex flex-col gap-2 rounded-xl border bg-card p-4" aria-label="Video summary">
         {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="video-title line-clamp-2 text-base sm:text-lg">{video.title}</h2>
-          <div className="video-feedback flex shrink-0 gap-2">
-            <FeedbackButton
-              kind="liked"
-              label="I liked this video"
-              tooltipId={`like-tooltip-${id}`}
-              pressed={feedback === 'liked'}
-              disabled={savingFeedback}
-              onClick={() => void changeFeedback(feedback === 'liked' ? null : 'liked')}
-            />
-            <FeedbackButton
-              kind="disliked"
-              label="I didn't really like this video"
-              tooltipId={`dislike-tooltip-${id}`}
-              pressed={feedback === 'disliked'}
-              disabled={savingFeedback}
-              onClick={() => void changeFeedback(feedback === 'disliked' ? null : 'disliked')}
-            />
-            {playlists && onToggleSaved && onCreatePlaylist && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h2 className="video-title min-w-0 flex-1 line-clamp-2 text-base sm:text-lg">{video.title}</h2>
+          <div className="video-feedback flex shrink-0 self-end gap-2 sm:self-auto">
+            {onFeedbackChange && (
+              <>
+                <FeedbackButton
+                  kind="liked"
+                  label="I liked this video"
+                  tooltipId={`like-tooltip-${id}`}
+                  pressed={feedback === 'liked'}
+                  disabled={savingFeedback}
+                  onClick={() => void changeFeedback(feedback === 'liked' ? null : 'liked')}
+                />
+                <FeedbackButton
+                  kind="disliked"
+                  label="I didn't really like this video"
+                  tooltipId={`dislike-tooltip-${id}`}
+                  pressed={feedback === 'disliked'}
+                  disabled={savingFeedback}
+                  onClick={() => void changeFeedback(feedback === 'disliked' ? null : 'disliked')}
+                />
+              </>
+            )}
+            {(notebook || canUsePlaylists) && (
               <SaveMenu
                 youtubeId={video.youtubeId}
                 idPrefix={`video-${id}`}
-                playlists={playlists}
-                onToggle={(playlistId, save) => onToggleSaved(video.youtubeId, playlistId, save)}
-                onCreate={(name) => onCreatePlaylist(video.youtubeId, name)}
+                notebook={notebook}
+                playlists={canUsePlaylists ? playlists : undefined}
+                onToggle={onTogglePlaylist ? (playlistId, save) => onTogglePlaylist(video.youtubeId, playlistId, save) : undefined}
+                onCreate={onCreatePlaylist ? (name) => onCreatePlaylist(video.youtubeId, name) : undefined}
               />
             )}
           </div>

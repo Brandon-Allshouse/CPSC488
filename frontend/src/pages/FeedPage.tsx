@@ -21,6 +21,7 @@ import AdminPage from './AdminPage';
 import LeaderboardPage from './LeaderboardPage';
 import YourVideosPage from './YourVideosPage';
 import WatchHistoryPage from './WatchHistoryPage';
+import { fetchSavedVideos, removeSavedVideo, saveVideo } from '../api/savedVideos';
 
 // How long to keep checking for videos for brand-new topics: every 3 seconds, for up to a minute.
 const FINDING_CHECK_MS = 3000;
@@ -48,6 +49,28 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Videos in the Study notebook, so each card's bookmark shows whether it's saved there.
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!user) {
+      setSavedIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    fetchSavedVideos()
+      .then((saved) => {
+        if (!cancelled) setSavedIds(new Set(saved.map((video) => video.youtubeId)));
+      })
+      .catch(() => {
+        // The feed still works even if saved videos fail to load.
+        if (!cancelled) setSavedIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
@@ -159,7 +182,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     setPlaylists(await fetchMyPlaylists());
   }
 
-  const toggleSaved = (youtubeId: string, playlistId: number, save: boolean) =>
+  const togglePlaylistSaved = (youtubeId: string, playlistId: number, save: boolean) =>
     changePlaylists(() => (save ? addToPlaylist(playlistId, youtubeId) : removeFromPlaylist(playlistId, youtubeId)));
 
   const createPlaylistAndSave = (youtubeId: string, name: string) =>
@@ -223,6 +246,35 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     } finally {
       loadingRef.current = false;
       setLoading(false);
+    }
+  }
+
+  // Used by Your videos so removing a notebook entry also updates the feed bookmark.
+  async function removeNotebookVideo(youtubeId: string) {
+    await removeSavedVideo(youtubeId);
+    setSavedIds((current) => {
+      const next = new Set(current);
+      next.delete(youtubeId);
+      return next;
+    });
+  }
+
+  // Adds the video to the Study notebook, or takes it out if it's already there.
+  async function toggleSaved(video: FeedVideo) {
+    if (!user) return;
+    const save = !savedIds.has(video.youtubeId);
+    try {
+      await (save ? saveVideo(video.youtubeId) : removeSavedVideo(video.youtubeId));
+      setSavedIds((current) => {
+        const next = new Set(current);
+        if (save) next.add(video.youtubeId);
+        else next.delete(video.youtubeId);
+        return next;
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) onLogout();
+      // The save menu shows this error. A failed save must not stop feed pagination.
+      throw err;
     }
   }
 
@@ -331,6 +383,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       <YourVideosPage
         {...navigation}
         onOpenVideo={openSavedVideo}
+        onRemoveNotebookVideo={removeNotebookVideo}
         playlists={playlists}
         playlistsError={playlistsError}
         onCreatePlaylist={(name) => changePlaylists(() => createPlaylist(name))}
@@ -387,12 +440,15 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
           <VideoCard
             key={video.youtubeId}
             video={video}
+            canSave={user !== null}
+            saved={savedIds.has(video.youtubeId)}
+            onToggleSaved={toggleSaved}
             feedback={feedbackByVideo[video.youtubeId] ?? null}
             onFeedbackChange={changeVideoFeedback}
             highlighted={video.youtubeId === openedVideoId}
             onPlay={recordPlay}
             playlists={playlists ?? undefined}
-            onToggleSaved={toggleSaved}
+            onTogglePlaylist={togglePlaylistSaved}
             onCreatePlaylist={createPlaylistAndSave}
           />
         ))}

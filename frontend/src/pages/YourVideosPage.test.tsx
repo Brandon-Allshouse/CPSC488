@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import { fetchMyVideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
+import { fetchSavedVideos } from '../api/savedVideos';
+import { fetchStudyNotes } from '../api/studyNotes';
 import YourVideosPage from './YourVideosPage';
 
 vi.mock('../api/feed', () => ({ fetchMyVideoFeedback: vi.fn() }));
+vi.mock('../api/savedVideos', () => ({ fetchSavedVideos: vi.fn() }));
+vi.mock('../api/studyNotes', () => ({ fetchStudyNotes: vi.fn(), saveStudyNote: vi.fn() }));
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const handlers = {
@@ -19,6 +23,7 @@ const handlers = {
   onCreatePlaylist: vi.fn(),
   onDeletePlaylist: vi.fn(),
   onRemoveFromPlaylist: vi.fn(),
+  onRemoveNotebookVideo: vi.fn(),
 };
 
 const savedVideo = { youtubeId: 'video000003', title: 'Saved title', creator: 'Saved creator' };
@@ -37,6 +42,10 @@ function openTab(name: RegExp) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchMyVideoFeedback).mockReset().mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
+  vi.mocked(fetchSavedVideos).mockReset().mockResolvedValue([]);
+  vi.mocked(fetchStudyNotes).mockReset().mockResolvedValue([]);
+  handlers.onRemoveNotebookVideo.mockReset().mockResolvedValue(undefined);
   handlers.onCreatePlaylist.mockResolvedValue(undefined);
   handlers.onDeletePlaylist.mockResolvedValue(undefined);
   handlers.onRemoveFromPlaylist.mockResolvedValue(undefined);
@@ -67,7 +76,7 @@ describe('YourVideosPage', () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
     renderPage();
 
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Watch later', 'Exam prep']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Study notebook', 'Watch later', 'Exam prep']);
     expect(screen.getByText('Saved title')).toBeTruthy();
     expect(screen.getByText('This playlist is empty.')).toBeTruthy();
   });
@@ -215,6 +224,8 @@ describe('YourVideosPage', () => {
     openTab(/^Disliked/);
     expect(screen.getByText('Sign in to see your disliked videos.')).toBeTruthy();
     expect(fetchMyVideoFeedback).not.toHaveBeenCalled();
+    expect(fetchSavedVideos).not.toHaveBeenCalled();
+    expect(fetchStudyNotes).not.toHaveBeenCalled();
   });
 
   it('goes back to the feed', async () => {
@@ -279,4 +290,89 @@ describe('YourVideosPage', () => {
     fireEvent.click(pageButton);
     expect(onShowHistory).toHaveBeenCalledTimes(1);
   });
+
+  it('shows existing notebook videos alongside playlists in the Saved tab', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: 'video000004', title: 'Notebook lesson', channelTitle: 'Study channel', topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    renderPage();
+    const notebook = screen.getByRole('region', { name: 'Study notebook' });
+    expect(await within(notebook).findByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Watch later' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
+  });
+
+  it('opens a notebook video using the existing watch-in-feed action', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: 'video000004', title: 'Notebook lesson', channelTitle: 'Study channel', topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Notebook lesson' }));
+    expect(handlers.onOpenVideo).toHaveBeenCalledWith({ youtubeId: 'video000004', title: 'Notebook lesson', creator: 'Study channel' });
+  });
+
+  it('removes a notebook entry without changing playlist membership', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: savedVideo.youtubeId, title: savedVideo.title, channelTitle: savedVideo.creator, topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    renderPage();
+    const notebook = screen.getByRole('region', { name: 'Study notebook' });
+    const remove = await within(notebook).findByRole<HTMLButtonElement>('button', { name: 'Remove Saved title from Study notebook' });
+    await waitFor(() => expect(remove.disabled).toBe(false));
+    fireEvent.click(remove);
+    await waitFor(() => expect(within(notebook).queryByRole('button', { name: 'Saved title' })).toBeNull());
+    expect(handlers.onRemoveNotebookVideo).toHaveBeenCalledWith(savedVideo.youtubeId);
+    expect(within(screen.getByRole('region', { name: 'Watch later' })).getByRole('button', { name: 'Saved title' })).toBeTruthy();
+    expect(handlers.onRemoveFromPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('keeps a notebook entry visible when removing it fails', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: 'video000004', title: 'Notebook lesson', channelTitle: 'Study channel', topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    handlers.onRemoveNotebookVideo.mockRejectedValue(new Error('Could not remove this entry.'));
+    renderPage();
+    const remove = await screen.findByRole<HTMLButtonElement>('button', { name: 'Remove Notebook lesson from Study notebook' });
+    await waitFor(() => expect(remove.disabled).toBe(false));
+    fireEvent.click(remove);
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not remove this entry.');
+    expect(screen.getByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
+  });
+
+  it('keeps playlists visible when loading the notebook fails', async () => {
+    vi.mocked(fetchSavedVideos).mockRejectedValue(new Error('Study collection unavailable.'));
+    renderPage();
+    expect((await screen.findByRole('alert')).textContent).toBe('Study collection unavailable.');
+    expect(within(screen.getByRole('region', { name: 'Watch later' })).getByRole('button', { name: 'Saved title' })).toBeTruthy();
+  });
+
+  it('counts a saved video once when it is in both the notebook and a playlist', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: savedVideo.youtubeId, title: savedVideo.title, channelTitle: savedVideo.creator, topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    renderPage();
+    await within(screen.getByRole('region', { name: 'Study notebook' })).findByRole('button', { name: 'Saved title' });
+    expect(screen.getByRole('tab', { name: /^Saved/ }).textContent).toBe('Saved(1)');
+  });
+
+
+  it('keeps an unfinished notebook note when the user cancels changing tabs', async () => {
+    vi.mocked(fetchSavedVideos).mockResolvedValue([
+      { youtubeId: 'video000004', title: 'Notebook lesson', channelTitle: 'Study channel', topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },
+    ]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderPage();
+    const edit = await screen.findByRole<HTMLButtonElement>('button', { name: 'Edit note for Notebook lesson' });
+    await waitFor(() => expect(edit.disabled).toBe(false));
+    fireEvent.click(edit);
+    await act(async () => {
+      fireEvent.change(screen.getByRole('textbox', { name: 'Personal study notes' }), { target: { value: 'Finish these notes later.' } });
+    });
+    await waitFor(() => expect(screen.getByText('Unsaved changes')).toBeTruthy());
+    openTab(/^Liked/);
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByRole('tab', { name: /^Saved/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Personal study notes' }).value).toBe('Finish these notes later.');
+  });
+
 });

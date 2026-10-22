@@ -594,6 +594,21 @@ newest-saved first. Names are trimmed and must be 1-50 characters on one line; "
 reserved, and names are compared ignoring case ("Math" and "math" are the same). Deleting a playlist
 doesn't touch the videos themselves, and a video an admin bans disappears from every playlist.
 
+## Study notebook API
+
+The Study notebook is a private list of saved videos with a personal note on each, separate from
+playlists (a video can be in both). All endpoints need a login (`401` otherwise) and the user
+always comes from the session cookie. Each user can keep up to 500 notebook videos. More detail
+and manual test steps are in [docs/StudyNotebook.md](docs/StudyNotebook.md).
+
+| Method | Path                                  | Body       | Success response                                                       |
+|--------|---------------------------------------|------------|------------------------------------------------------------------------|
+| GET    | `/api/me/saved-videos`                | none       | `200 { videos }`, newest-saved first                                   |
+| POST   | `/api/me/saved-videos/{youtubeId}`    | none       | `204`; saving one that's already there is fine. `404` if the video isn't in our database, `409` if the notebook is full |
+| DELETE | `/api/me/saved-videos/{youtubeId}`    | none       | `204`; also deletes that video's note                                  |
+| GET    | `/api/me/study-notes`                 | none       | `200 { notes: [{ youtubeId, note, updatedAt }] }`, newest edit first   |
+| PUT    | `/api/me/study-notes/{youtubeId}`     | `{ note }` | `200 { note }`; an empty note clears the text. `400` if over 2,000 characters, `404` if the video isn't in their notebook |
+
 ## Admin API
 
 Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the user isn't an admin.
@@ -664,3 +679,4 @@ Each video also has thumbs up/down buttons and a "Video Summary" box, but for no
 on screen. The thumbs choice isn't saved and resets when the page reloads, and the summary box is
 empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
 to shape the feed.
+
