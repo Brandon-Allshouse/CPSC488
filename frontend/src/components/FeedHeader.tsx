@@ -126,7 +126,7 @@ export default function FeedHeader({
             Interests
           </MenuItem>
           <MenuItem icon={<Heart />} onSelect={select(onShowLikedVideos)}>
-            Liked videos
+            Your videos
           </MenuItem>
           {onShowHistory && (
             <MenuItem icon={<History />} onSelect={select(onShowHistory)}>

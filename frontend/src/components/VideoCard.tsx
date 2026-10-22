@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
 import { cn } from '@/lib/utils';
+import type { Playlist} from '../api/playlists';
+import SaveMenu from './SaveMenu';
 
 // youtube-nocookie.com is YouTube's "privacy mode" player, which doesn't set tracking cookies
 // until you hit play. If you change either domain, update the CSP in vite.config.ts too.
@@ -16,6 +18,9 @@ interface Props {
   highlighted?: boolean;
   /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
   onPlay?: (youtubeId: string) => void;
+  playlists?: Playlist[];
+  onToggleSaved?: (youtubeId: string, playlistID: number, save:boolean) => Promise<void>;
+  onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
 }
 
 /** The card's element id, so the feed can scroll to a video. YouTube ids are URL-safe already. */
@@ -60,7 +65,7 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ video, feedback, onFeedbackChange, highlighted = false, onPlay }: Props) {
+export default function VideoCard({ video, feedback, onFeedbackChange, highlighted = false, onPlay, playlists, onToggleSaved, onCreatePlaylist }: Props) {
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -164,6 +169,15 @@ export default function VideoCard({ video, feedback, onFeedbackChange, highlight
               disabled={savingFeedback}
               onClick={() => void changeFeedback(feedback === 'disliked' ? null : 'disliked')}
             />
+            {playlists && onToggleSaved && onCreatePlaylist && (
+              <SaveMenu
+                youtubeId={video.youtubeId}
+                idPrefix={`video-${id}`}
+                playlists={playlists}
+                onToggle={(playlistId, save) => onToggleSaved(video.youtubeId, playlistId, save)}
+                onCreate={(name) => onCreatePlaylist(video.youtubeId, name)}
+              />
+            )}
           </div>
         </div>
         <p className="text-sm text-muted-foreground">{video.channelTitle}</p>

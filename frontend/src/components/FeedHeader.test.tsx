@@ -41,7 +41,7 @@ describe('FeedHeader', () => {
     fireEvent.click(screen.getByText('Profile'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Interests' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
     fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
 
     expect(handlers.onEditInterests).toHaveBeenCalledTimes(1);
