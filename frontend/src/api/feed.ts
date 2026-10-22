@@ -22,10 +22,11 @@ export interface Video {
 }
 
 /**
- * The parts of a video the feed shows. A liked video opened from "Your videos" only has these,
- * since it may not be in the feed pages loaded so far.
+ * The parts of a video the feed shows. A liked video opened from "Your videos" has no topic or
+ * date, since it may not be in the feed pages loaded so far.
  */
-export type FeedVideo = Pick<Video, 'youtubeId' | 'title' | 'channelTitle'>;
+export type FeedVideo = Pick<Video, 'youtubeId' | 'title' | 'channelTitle'> &
+  Partial<Pick<Video, 'topicId' | 'publishedAt'>>;
 
 export interface FeedPage {
   videos: Video[];

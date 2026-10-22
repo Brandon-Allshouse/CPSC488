@@ -43,6 +43,18 @@ describe('VideoCard', () => {
     expect(container.querySelector('iframe')).toBeNull();
   });
 
+  it('shows the topic and how long ago the video was posted', () => {
+    render(<VideoCard video={video} topicName="Biology" />);
+    expect(screen.getByText('Biology')).toBeTruthy();
+    expect(screen.getByText(/ago$/)).toBeTruthy();
+  });
+
+  it('leaves out the topic and date when it does not have them', () => {
+    render(<VideoCard video={{ youtubeId: video.youtubeId, title: video.title, channelTitle: video.channelTitle }} />);
+    expect(screen.queryByText(/ago$/)).toBeNull();
+    expect(screen.getByText('Test Channel')).toBeTruthy();
+  });
+
   it('shows the saved choice and sends toggle changes to its handler', async () => {
     const result = renderVideoCard();
     const like = screen.getByRole('button', { name: 'I liked this video' });
