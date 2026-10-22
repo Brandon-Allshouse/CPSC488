@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import brainLogo from '../../assets/brainfeed-logo.png';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import ThemeToggle from '../ThemeToggle';
 
 interface Props {
   /** Used for ids, e.g. "login" gives id="login-page" and the title id="login-title". */
@@ -27,6 +28,7 @@ export default function AuthLayout({ name, title, description, className, childr
         src={brainLogo}
         alt="BrainFeed brain logo"
       />
+      <ThemeToggle className="fixed top-4 right-4 z-10" />
       <Card
         aria-labelledby={`${name}-title`}
         className={cn('w-full max-w-md animate-fade-in-up border-border/70 shadow-2xl', className)}
