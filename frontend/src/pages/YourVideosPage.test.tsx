@@ -78,6 +78,13 @@ describe('YourVideosPage', () => {
     expect(screen.getByText('Loading playlists…')).toBeTruthy();
   });
 
+  it("shows an error instead of loading forever when the playlists couldn't load", () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
+    render(<YourVideosPage user={testUser} {...handlers} playlists={null} playlistsError="Server error" />);
+    expect(screen.getByRole('alert').textContent).toBe('Server error');
+    expect(screen.queryByText('Loading playlists…')).toBeNull();
+  });
+
   it('creates a playlist from the name box', async () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
     renderPage();

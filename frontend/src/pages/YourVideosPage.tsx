@@ -19,6 +19,8 @@ interface Props extends PageNavigation {
   onOpenVideo: (video: SavedVideo) => void;
   /** The user's playlists, kept by FeedPage so the feed's Save buttons stay in step. null while loading. */
   playlists: Playlist[] | null;
+  /** Set if the playlists couldn't be loaded, so the Saved tab shows it instead of loading forever. */
+  playlistsError?: string | null;
   onCreatePlaylist: (name: string) => Promise<void>;
   onDeletePlaylist: (playlistId: number) => Promise<void>;
   onRemoveFromPlaylist: (playlistId: number, youtubeId: string) => Promise<void>;
@@ -29,6 +31,7 @@ interface Props extends PageNavigation {
 export default function YourVideosPage({
   onOpenVideo,
   playlists,
+  playlistsError = null,
   onCreatePlaylist,
   onDeletePlaylist,
   onRemoveFromPlaylist,
@@ -100,7 +103,7 @@ export default function YourVideosPage({
 
   function renderVideos(videos: SavedVideo[], emptyMessage: string, action?: (video: SavedVideo) => ReactNode) {
     return (
-      <Table className="liked-videos-table">
+      <Table className="your-videos-table">
         <TableHeader>
           <TableRow>
             <TableHead scope="col">Title</TableHead>
@@ -167,7 +170,7 @@ export default function YourVideosPage({
 
   function section(id: string, title: ReactNode, icon: ReactNode, count: number | undefined, body: ReactNode, actions?: ReactNode) {
     return (
-      <Card className="liked-videos-section" aria-labelledby={id} role="region">
+      <Card key={id} className="your-videos-section" aria-labelledby={id} role="region">
         <CardHeader className="flex-row items-center gap-2">
           {icon}
           {/* Playlist names are typed by the user: plain JSX text only. */}
@@ -203,8 +206,13 @@ export default function YourVideosPage({
   }
 
   function savedTab() {
-    if (!user) return section('saved-videos-title', 'Saved videos', <Bookmark aria-hidden="true" className="size-5 text-primary" />, undefined, signInMessage('saved videos'));
-    if (playlists === null) return section('saved-videos-title', 'Saved videos', <Bookmark aria-hidden="true" className="size-5 text-primary" />, undefined, loadingMessage('Loading playlists…'));
+    if (playlists === null) {
+      let body: ReactNode;
+      if (!user) body = signInMessage('saved videos');
+      else if (playlistsError) body = errorAlert(playlistsError);
+      else body = loadingMessage('Loading playlists…');
+      return section('saved-videos-title', 'Saved videos', <Bookmark aria-hidden="true" className="size-5 text-primary" />, undefined, body);
+    }
     return (
       <>
         <form className="flex gap-2" onSubmit={handleCreate}>
@@ -276,7 +284,7 @@ export default function YourVideosPage({
   return (
     <PageLayout
       {...navigation}
-      name="liked-videos"
+      name="your-videos"
       title="Your videos"
       description="Only you can see these lists. Click a title to watch it in your feed."
       actions={

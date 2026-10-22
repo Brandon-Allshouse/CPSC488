@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api/client';
 import {
   fetchFeed,
   fetchMyVideoFeedback,
@@ -10,7 +11,7 @@ import {
 } from '../api/feed';
 import { fetchWatchHistory, recordWatch } from '../api/history';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
-import { fetchMyPlaylists } from '../api/playlists';
+import { addToPlaylist, createPlaylist, fetchMyPlaylists, type Playlist } from '../api/playlists';
 import FeedPage from './FeedPage';
 
 // The admin page loads its own data; empty answers are enough to check the navigation.
@@ -76,6 +77,9 @@ beforeEach(() => {
   vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
   vi.mocked(saveMyVideoFeedback).mockResolvedValue(undefined);
   vi.mocked(recordWatch).mockReset().mockResolvedValue(undefined);
+  vi.mocked(fetchMyPlaylists).mockReset().mockResolvedValue([]);
+  vi.mocked(addToPlaylist).mockReset().mockResolvedValue(undefined);
+  vi.mocked(createPlaylist).mockReset();
 });
 
 afterEach(() => {
@@ -538,6 +542,65 @@ describe('FeedPage', () => {
     expect(screen.getByText('Sign in to see your liked videos.')).toBeTruthy();
     expect(fetchMyVideoFeedback).not.toHaveBeenCalled();
     expect(fetchMyPlaylists).not.toHaveBeenCalled();
+  });
+
+  it('has no Save button for guests', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed(null);
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+    expect(screen.queryByRole('button', { name: 'Save video' })).toBeNull();
+  });
+
+  it('saves a video to Watch later and shows it as saved', async () => {
+    const watchLater: Playlist = { id: 1, name: 'Watch later', watchLater: true, videos: [] };
+    const saved: Playlist = { ...watchLater, videos: [{ youtubeId: 'video000001', title: 'Test video 1', creator: 'Test Channel' }] };
+    vi.mocked(fetchMyPlaylists).mockResolvedValueOnce([watchLater]).mockResolvedValue([saved]);
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save video' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Watch later' }));
+
+    expect(await screen.findByRole('button', { name: 'Saved. Change playlists' })).toBeTruthy();
+    expect(addToPlaylist).toHaveBeenCalledWith(1, 'video000001');
+  });
+
+  it('still shows a new playlist if saving the video into it fails', async () => {
+    const watchLater: Playlist = { id: 1, name: 'Watch later', watchLater: true, videos: [] };
+    const biology: Playlist = { id: 2, name: 'Biology', watchLater: false, videos: [] };
+    vi.mocked(fetchMyPlaylists).mockResolvedValueOnce([watchLater]).mockResolvedValue([watchLater, biology]);
+    vi.mocked(createPlaylist).mockResolvedValue(biology);
+    vi.mocked(addToPlaylist).mockRejectedValue(new Error('Video not found.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Save video' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'New playlist name' }), { target: { value: 'Biology' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create playlist' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Video not found.');
+    expect(await screen.findByRole('checkbox', { name: 'Biology' })).toBeTruthy();
+  });
+
+  it("tells the user on Your videos when their playlists couldn't load", async () => {
+    vi.mocked(fetchMyPlaylists).mockRejectedValue(new Error('Server error'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Server error');
+  });
+
+  it('sends the user to log in again if their session expired while loading playlists', async () => {
+    vi.mocked(fetchMyPlaylists).mockRejectedValue(new ApiError(401, 'Not logged in.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    renderFeed();
+    await waitFor(() => expect(onLogout).toHaveBeenCalled());
   });
 
   it('shows Guest and a log in action in the profile menu for guests', () => {
