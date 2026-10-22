@@ -5,6 +5,7 @@ import AuthLayout from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import LanguageSelect from '@/components/LanguageSelect';
 
 interface Props {
   /** Topic ids that start out selected. */
@@ -42,6 +43,13 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
     });
   }
 
+  const subjectIds = topics ? topics.filter((topic) => topic.parentId === null).map((topic) => topic.id) : [];
+  const allSelected = subjectIds.length > 0 && subjectIds.every((id) => selected.has(id));
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(subjectIds));
+  }
+
   async function handleSave() {
     setError(null);
     setSaving(true);
@@ -74,6 +82,16 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
         </div>
       )}
       {topics === null && !error && <p className="text-sm text-muted-foreground">Loading topics…</p>}
+
+      
+      {topics && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <LanguageSelect />
+          <Button variant="outline" size="sm" onClick={toggleAll}>
+            {allSelected ? 'Clear all' : 'Select all subjects'}
+          </Button>
+        </div>
+      )}
 
       {topics && (
         <div id="subject-list" className="flex max-h-[55dvh] flex-col gap-2 overflow-y-auto pr-1">
