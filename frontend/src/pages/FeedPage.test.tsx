@@ -10,6 +10,7 @@ import {
 } from '../api/feed';
 import { fetchWatchHistory, recordWatch } from '../api/history';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
+import { fetchMyPlaylists } from '../api/playlists';
 import FeedPage from './FeedPage';
 
 // The admin page loads its own data; empty answers are enough to check the navigation.
@@ -26,6 +27,14 @@ vi.mock('../api/history', () => ({
   fetchWatchHistory: vi.fn(),
   removeFromWatchHistory: vi.fn(),
   clearWatchHistory: vi.fn(),
+}));
+
+vi.mock('../api/playlists', () => ({
+  fetchMyPlaylists: vi.fn().mockResolvedValue([]),
+  createPlaylist: vi.fn(),
+  deletePlaylist: vi.fn(),
+  addToPlaylist: vi.fn(),
+  removeFromPlaylist: vi.fn(),
 }));
 
 vi.mock('../api/feed', () => ({
@@ -373,7 +382,8 @@ describe('FeedPage', () => {
 
   async function openFromYourVideos(title: string) {
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
     fireEvent.click(await screen.findByRole('button', { name: title }));
   }
 
@@ -435,7 +445,8 @@ describe('FeedPage', () => {
     scrollToBottom();
     await screen.findByText('Test video 1');
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
     const title = await screen.findByRole('button', { name: 'Test video 1' });
 
     vi.useFakeTimers();
@@ -498,20 +509,18 @@ describe('FeedPage', () => {
     renderFeed();
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
 
     expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Disliked videos' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
     expect(await screen.findByText('Liked title')).toBeTruthy();
     expect(screen.getByText('Liked creator')).toBeTruthy();
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Title', 'Creator']);
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Disliked/ }));
+    expect(screen.getByRole('heading', { name: 'Disliked videos' })).toBeTruthy();
     expect(screen.getByText('Disliked title')).toBeTruthy();
     expect(screen.getByText('Disliked creator')).toBeTruthy();
-    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
-      'Title',
-      'Creator',
-      'Title',
-      'Creator',
-    ]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(screen.getByText('Profile')).toBeTruthy();
@@ -522,10 +531,13 @@ describe('FeedPage', () => {
     renderFeed(null);
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Liked videos' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
 
-    expect(screen.getAllByText('Sign in to view saved videos.')).toHaveLength(2);
+    expect(screen.getByText('Sign in to see your saved videos.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
+    expect(screen.getByText('Sign in to see your liked videos.')).toBeTruthy();
     expect(fetchMyVideoFeedback).not.toHaveBeenCalled();
+    expect(fetchMyPlaylists).not.toHaveBeenCalled();
   });
 
   it('shows Guest and a log in action in the profile menu for guests', () => {

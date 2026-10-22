@@ -10,6 +10,7 @@ import {
   type SavedVideo,
   type VideoFeedback,
 } from '../api/feed';
+import { addToPlaylist, createPlaylist, deletePlaylist, fetchMyPlaylists, removeFromPlaylist, type Playlist } from '../api/playlists';
 import brainLogo from '../assets/brainfeed-logo.png';
 import FeedHeader from '../components/FeedHeader';
 import VideoCard, { videoCardId } from '../components/VideoCard';
@@ -18,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { recordWatch } from '../api/history';
 import AdminPage from './AdminPage';
 import LeaderboardPage from './LeaderboardPage';
-import LikedVideosPage from './LikedVideosPage';
+import YourVideosPage from './YourVideosPage';
 import WatchHistoryPage from './WatchHistoryPage';
 
 // How long to keep checking for videos for brand-new topics: every 3 seconds, for up to a minute.
@@ -50,6 +51,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
+  const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   // Which screen is showing. FeedPage stays mounted, so the loaded videos are still there on the way back.
   const [view, setView] = useState<'feed' | 'liked' | 'history' | 'leaderboard' | 'admin'>('feed');
 
@@ -110,6 +112,49 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       cancelled = true;
     };
   }, [user]);
+
+    useEffect(() => {
+    if (!user) {
+      setPlaylists(null);
+      return;
+    }
+    let cancelled = false;
+    fetchMyPlaylists()
+      .then((loaded) => {
+        if (!cancelled) setPlaylists(loaded);
+      })
+      .catch((err: unknown) => {
+        // If they can't load, the Save buttons just stay hidden.
+        if (!cancelled && err instanceof ApiError && err.status === 401) onLogout();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // Makes a playlist change, then reloads the playlists so every Save button and "Your videos"
+  // show the same thing. Errors are thrown on to whoever shows them (SaveMenu or YourVideosPage).
+  async function changePlaylists(change: () => Promise<unknown>) {
+    try {
+      await change();
+      setPlaylists(await fetchMyPlaylists());
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        onLogout();
+        return;
+      }
+      throw err;
+    }
+  }
+
+  const toggleSaved = (youtubeId: string, playlistId: number, save: boolean) =>
+    changePlaylists(() => (save ? addToPlaylist(playlistId, youtubeId) : removeFromPlaylist(playlistId, youtubeId)));
+
+  const createPlaylistAndSave = (youtubeId: string, name: string) =>
+    changePlaylists(async () => {
+      const playlist = await createPlaylist(name);
+      await addToPlaylist(playlist.id, youtubeId);
+    });
 
   async function changeVideoFeedback(youtubeId: string, feedback: VideoFeedback | null) {
     if (!user) {
@@ -269,7 +314,18 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     onLogout,
   };
 
-  if (view === 'liked') return <LikedVideosPage {...navigation} onOpenVideo={openSavedVideo} />;
+  if (view === 'liked') {
+    return (
+      <YourVideosPage
+        {...navigation}
+        onOpenVideo={openSavedVideo}
+        playlists={playlists}
+        onCreatePlaylist={(name) => changePlaylists(() => createPlaylist(name))}
+        onDeletePlaylist={(playlistId) => changePlaylists(() => deletePlaylist(playlistId))}
+        onRemoveFromPlaylist={(playlistId, youtubeId) => changePlaylists(() => removeFromPlaylist(playlistId, youtubeId))}
+      />
+    );
+  }  
   if (view === 'history') return <WatchHistoryPage {...navigation} onOpenVideo={openSavedVideo} />;
   if (view === 'leaderboard') return <LeaderboardPage {...navigation} />;
   if (view === 'admin') return <AdminPage {...navigation} />;
@@ -322,6 +378,9 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
             onFeedbackChange={changeVideoFeedback}
             highlighted={video.youtubeId === openedVideoId}
             onPlay={recordPlay}
+            playlists={playlists ?? undefined}
+            onToggleSaved={toggleSaved}
+            onCreatePlaylist={createPlaylistAndSave}
           />
         ))}
 
