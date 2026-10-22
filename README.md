@@ -67,7 +67,7 @@ frontend/                     React app (Vite project)
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
                                 SaveMenu (a video's bookmark button and "Save to…" playlist menu),
                                 LanguageSelect (language picker on the interests page; UI only for now)
-  src/index.css                 color theme, base font settings and animations (everything else is Tailwind classes)
+  src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
@@ -290,7 +290,7 @@ Common native-setup problems:
 The UI is built from [shadcn/ui](https://ui.shadcn.com) components styled with
 [Tailwind CSS](https://tailwindcss.com). shadcn/ui isn't a library you install: its components are
 short source files you copy into `src/components/ui/` and own. Colors come from the variables at the
-top of `src/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
+top of `src/styles/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
 color there changes it everywhere. Icons come from [lucide-react](https://lucide.dev).
 
 ### Getting around
@@ -353,12 +353,13 @@ Copy the component's code from ui.shadcn.com (the "Manual" install tab) into
 |---|---|
 | Classes and ids | Tailwind classes everywhere, plus named classes used as hooks (`feed-list`, `video-card`, `auth-backdrop`, ...). Ids on every page (`login-page`, `feed-page`, `admin-page`, ...), on form fields (`email`, `password`), and on headings that label sections |
 | `display: flex` | Tailwind's `flex` class, used across the app (`FeedHeader.tsx`, `PageLayout.tsx`, `VideoCard.tsx`, ...) |
-| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
-| 2+ font properties changed | `index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
-| 2+ box model properties changed | `margin` on `body` in `index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
+| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `styles/index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
+| 2+ font properties changed | `styles/index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
+| 2+ box model properties changed | `margin` on `body` in `styles/index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
 | Unobtrusive JavaScript | `index.html` has no inline scripts or `on...=` attributes. All behavior is attached from TypeScript modules, and the production Content-Security-Policy blocks inline scripts and handlers anyway |
-| 10+ functions | 80+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
-| 20+ event listeners | 40+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu with Escape; a `pointerdown` listener for closing it by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+| 10+ functions | 100+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `changePlaylists`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
+| 20+ event listeners | 60+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu and the Save menu with Escape; `pointerdown`/`mousedown` listeners for closing those menus by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+| Images, CSS and JS in separate folders | Images in `src/assets/`, CSS in `src/styles/`, and the code in `src/pages/`, `src/components/`, `src/api/` and `src/lib/` (plus the `main.tsx` and `App.tsx` entry files) |
 
 TypeScript counts as JavaScript here; it compiles to plain JavaScript.
 
