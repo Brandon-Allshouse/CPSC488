@@ -208,4 +208,32 @@ describe('VideoCard', () => {
     scrollInto(container.querySelector('article')!, 0);
     expect(onPlay).not.toHaveBeenCalled();
   });
+
+  it('has no Save button without playlists (guests)', () => {
+    renderVideoCard();
+    expect(screen.queryByRole('button', { name: 'Save video' })).toBeNull();
+  });
+
+  it('saves this video to the playlist that was ticked', async () => {
+    const onTogglePlaylist = vi.fn().mockResolvedValue(undefined);
+    const onCreatePlaylist = vi.fn().mockResolvedValue(undefined);
+    render(
+      <VideoCard
+        video={video}
+        feedback={null}
+        onFeedbackChange={onFeedbackChange}
+        playlists={[{ id: 1, name: 'Watch later', watchLater: true, videos: [] }]}
+        onTogglePlaylist={onTogglePlaylist}
+        onCreatePlaylist={onCreatePlaylist}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save video' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Watch later' }));
+    await waitFor(() => expect(onTogglePlaylist).toHaveBeenCalledWith('dQw4w9WgXcQ', 1, true));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'New playlist name' }), { target: { value: 'Biology' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create playlist' }));
+    await waitFor(() => expect(onCreatePlaylist).toHaveBeenCalledWith('dQw4w9WgXcQ', 'Biology'));
+  });
 });

@@ -74,6 +74,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout, on
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
+  const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   // Which screen is showing. FeedPage stays mounted, so the loaded videos are still there on the way back.
   const [view, setView] = useState<'feed' | 'liked' | 'history' | 'leaderboard' | 'admin'>('feed');
 
@@ -135,19 +136,28 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout, on
     };
   }, [user]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (!user) {
       setPlaylists(null);
+      setPlaylistsError(null);
       return;
     }
     let cancelled = false;
     fetchMyPlaylists()
       .then((loaded) => {
-        if (!cancelled) setPlaylists(loaded);
+        if (!cancelled) {
+          setPlaylists(loaded);
+          setPlaylistsError(null);
+        }
       })
       .catch((err: unknown) => {
-        // If they can't load, the Save buttons just stay hidden.
-        if (!cancelled && err instanceof ApiError && err.status === 401) onLogout();
+        // The feed's Save buttons stay hidden; "Your videos" shows the error instead of loading forever.
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          onLogout();
+        } else {
+          setPlaylistsError(err instanceof Error ? err.message : 'Could not load playlists.');
+        }
       });
     return () => {
       cancelled = true;
@@ -159,14 +169,16 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout, on
   async function changePlaylists(change: () => Promise<unknown>) {
     try {
       await change();
-      setPlaylists(await fetchMyPlaylists());
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLogout();
         return;
       }
+      // Part of it may have worked (playlist made, but adding the video failed), so reload anyway.
+      fetchMyPlaylists().then(setPlaylists, () => {});
       throw err;
     }
+    setPlaylists(await fetchMyPlaylists());
   }
 
   const togglePlaylistSaved = (youtubeId: string, playlistId: number, save: boolean) =>
@@ -373,12 +385,13 @@ async function toggleSaved(video: FeedVideo) {
         {...navigation}
         onOpenVideo={openSavedVideo}
         playlists={playlists}
+        playlistsError={playlistsError}
         onCreatePlaylist={(name) => changePlaylists(() => createPlaylist(name))}
         onDeletePlaylist={(playlistId) => changePlaylists(() => deletePlaylist(playlistId))}
         onRemoveFromPlaylist={(playlistId, youtubeId) => changePlaylists(() => removeFromPlaylist(playlistId, youtubeId))}
       />
     );
-  }  
+  }
   if (view === 'history') return <WatchHistoryPage {...navigation} onOpenVideo={openSavedVideo} />;
   if (view === 'leaderboard') return <LeaderboardPage {...navigation} />;
   if (view === 'admin') return <AdminPage {...navigation} />;

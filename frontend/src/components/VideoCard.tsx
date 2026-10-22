@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
-import { cn } from '@/lib/utils';
 import type { Playlist } from '../api/playlists';
+import { cn } from '@/lib/utils';
 import SaveMenu from './SaveMenu';
 import { Button } from '@/components/ui/button';
 
@@ -23,8 +23,11 @@ interface Props {
   highlighted?: boolean;
   /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
   onPlay?: (youtubeId: string) => void;
+  /** The user's playlists, for the bookmark menu. Leave the three playlist props out to hide it. */
   playlists?: Playlist[];
-  onTogglePlaylist?: (youtubeId: string, playlistID: number, save:boolean) => Promise<void>;
+  /** Adds the video to a playlist (save true) or removes it. Throws on failure. */
+  onTogglePlaylist?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
+  /** Makes a new playlist with this video in it. Throws on failure (e.g. name taken). */
   onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
 }
 

@@ -24,6 +24,8 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Scrollable feed of educational videos
 - Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
   videos where clicking a title takes you back to that video in your feed
+- Save videos with the bookmark button: every account has a "Watch later" playlist, and you can make
+  your own playlists. They're all on the "Your videos" page in the Profile menu
 - Less content from creators/channels you've marked as not interesting
 - Preferences and history saved for registered users: a private watch history of the last 25 videos
   you pressed play on
@@ -59,12 +61,13 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
+  src/pages/                    LoginPage, InterestsPage, FeedPage, YourVideosPage (playlists, liked, disliked), WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
   src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
   src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
+                                SaveMenu (a video's bookmark button and "Save to…" playlist menu),
                                 LanguageSelect (language picker on the interests page; UI only for now)
-  src/index.css                 color theme, base font settings and animations (everything else is Tailwind classes)
+  src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
@@ -287,7 +290,7 @@ Common native-setup problems:
 The UI is built from [shadcn/ui](https://ui.shadcn.com) components styled with
 [Tailwind CSS](https://tailwindcss.com). shadcn/ui isn't a library you install: its components are
 short source files you copy into `src/components/ui/` and own. Colors come from the variables at the
-top of `src/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
+top of `src/styles/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
 color there changes it everywhere. Icons come from [lucide-react](https://lucide.dev).
 
 ### Getting around
@@ -297,6 +300,10 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **A title on "Your videos" or "Watch history"** (both in the Profile menu) opens that video in the feed. If it's
   already loaded, the feed scrolls to it; if not, it's added at the top. Either way it's outlined
   for a few seconds, and scrolling carries on from there. A video is never shown twice.
+- **The bookmark button** on a video (signed-in users only) opens "Save to…": tick a playlist to
+  save the video there, untick to remove it, or type a name to make a new playlist with the video in
+  it. The button is filled in when the video is in any playlist. Playlists are managed on the
+  Saved tab of "Your videos".
 - **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
   Escape or a click outside it.
 
@@ -346,12 +353,13 @@ Copy the component's code from ui.shadcn.com (the "Manual" install tab) into
 |---|---|
 | Classes and ids | Tailwind classes everywhere, plus named classes used as hooks (`feed-list`, `video-card`, `auth-backdrop`, ...). Ids on every page (`login-page`, `feed-page`, `admin-page`, ...), on form fields (`email`, `password`), and on headings that label sections |
 | `display: flex` | Tailwind's `flex` class, used across the app (`FeedHeader.tsx`, `PageLayout.tsx`, `VideoCard.tsx`, ...) |
-| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
-| 2+ font properties changed | `index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
-| 2+ box model properties changed | `margin` on `body` in `index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
+| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `styles/index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
+| 2+ font properties changed | `styles/index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
+| 2+ box model properties changed | `margin` on `body` in `styles/index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
 | Unobtrusive JavaScript | `index.html` has no inline scripts or `on...=` attributes. All behavior is attached from TypeScript modules, and the production Content-Security-Policy blocks inline scripts and handlers anyway |
-| 10+ functions | 80+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
-| 20+ event listeners | 40+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu with Escape; a `pointerdown` listener for closing it by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+| 10+ functions | 100+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `changePlaylists`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
+| 20+ event listeners | 60+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu and the Save menu with Escape; `pointerdown`/`mousedown` listeners for closing those menus by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+| Images, CSS and JS in separate folders | Images in `src/assets/`, CSS in `src/styles/`, and the code in `src/pages/`, `src/components/`, `src/api/` and `src/lib/` (plus the `main.tsx` and `App.tsx` entry files) |
 
 TypeScript counts as JavaScript here; it compiles to plain JavaScript.
 
@@ -575,6 +583,27 @@ and loses a video if an admin bans it. All endpoints need a login and answer `40
 | PUT    | `/api/me/watch-history/{youtubeId}`   | none | `204`; records a play. `404` if the video isn't in our database          |
 | DELETE | `/api/me/watch-history/{youtubeId}`   | none | `204`; removes one video. `404` if it wasn't in the history              |
 | DELETE | `/api/me/watch-history`               | none | `204`; clears the whole history                                          |
+
+## Playlists API
+
+Saved videos live in playlists. Every user has a "Watch later" playlist, made automatically the
+first time their playlists are loaded, which can't be deleted or renamed. On top of that they can
+make up to 50 playlists of their own, each holding up to 500 videos. Playlists are private: all
+endpoints need a login (`401` otherwise), the user always comes from the session cookie, and a
+playlist id that belongs to someone else gets the same `404` as one that doesn't exist.
+
+| Method | Path                                          | Body       | Success response                                                       |
+|--------|-----------------------------------------------|------------|------------------------------------------------------------------------|
+| GET    | `/api/me/playlists`                           | none       | `200 { playlists }`, Watch later first, then A to Z                    |
+| POST   | `/api/me/playlists`                           | `{ name }` | `201 { playlist }`. `409` if the name is taken or they already have 50 |
+| DELETE | `/api/me/playlists/{id}`                      | none       | `204`. `404` if it isn't theirs, or it's Watch later                   |
+| PUT    | `/api/me/playlists/{id}/videos/{youtubeId}`   | none       | `204`; adding one that's already there is fine. `400` if the video isn't in our database, `404` if the playlist isn't theirs, `409` if it's full |
+| DELETE | `/api/me/playlists/{id}/videos/{youtubeId}`   | none       | `204`. `404` if the playlist isn't theirs                              |
+
+A `playlist` is `{ id, name, watchLater, videos }`, and its `videos` are `{ youtubeId, title, creator }`,
+newest-saved first. Names are trimmed and must be 1-50 characters on one line; "Watch later" is
+reserved, and names are compared ignoring case ("Math" and "math" are the same). Deleting a playlist
+doesn't touch the videos themselves, and a video an admin bans disappears from every playlist.
 
 ## Admin API
 
