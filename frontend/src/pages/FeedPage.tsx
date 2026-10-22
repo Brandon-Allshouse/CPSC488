@@ -34,12 +34,11 @@ interface Props {
   user: User | null;
   onEditInterests: () => void;
   onLogout: () => void;
-  onSavedVideos: () => void;
 }
 
 // The scrolling video feed. Loads 10 videos at a time as the user nears the bottom.
 // App.tsx remounts this page when the interests change, which starts a fresh feed.
-export default function FeedPage({ topicIds, user, onEditInterests, onLogout, onSavedVideos }: Props) {
+export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: Props) {
   // A random seed per visit gives a new shuffle each time, but stays fixed while scrolling so
   // pages don't repeat videos.
   const [seed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
@@ -248,6 +247,16 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout, on
     }
   }
 
+  // Used by Your videos so removing a notebook entry also updates the feed bookmark.
+  async function removeNotebookVideo(youtubeId: string) {
+    await removeSavedVideo(youtubeId);
+    setSavedIds((current) => {
+      const next = new Set(current);
+      next.delete(youtubeId);
+      return next;
+    });
+  }
+
 async function toggleSaved(video: FeedVideo) {
   if (!user) return;
 
@@ -272,11 +281,9 @@ async function toggleSaved(video: FeedVideo) {
       });
     }
   } catch (err) {
-    setError(
-      err instanceof Error
-        ? err.message
-        : 'Could not update saved videos.',
-    );
+    if (err instanceof ApiError && err.status === 401) onLogout();
+    // The save menu owns this error. A failed save must not stop feed pagination.
+    throw err;
   }
 }
   // Each video is as tall as the list, so scrolling by the list's height moves exactly one video.
@@ -384,6 +391,7 @@ async function toggleSaved(video: FeedVideo) {
       <YourVideosPage
         {...navigation}
         onOpenVideo={openSavedVideo}
+        onRemoveNotebookVideo={removeNotebookVideo}
         playlists={playlists}
         playlistsError={playlistsError}
         onCreatePlaylist={(name) => changePlaylists(() => createPlaylist(name))}
@@ -408,7 +416,6 @@ async function toggleSaved(video: FeedVideo) {
         onGoHome={scrollToTop}
         onEditInterests={onEditInterests}
         onShowLikedVideos={navigation.onShowLikedVideos}
-        onShowSavedVideos={onSavedVideos}
         onShowLeaderboard={navigation.onShowLeaderboard}
         onShowHistory={navigation.onShowHistory}
         onShowAdmin={navigation.onShowAdmin}

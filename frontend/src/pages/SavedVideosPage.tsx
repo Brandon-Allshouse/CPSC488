@@ -30,21 +30,9 @@ export default function SavedVideosPage({ onBack }: Props) {
   }, []);
 
   async function handleRemove(video: FeedVideo) {
-    try {
-      await removeSavedVideo(video.youtubeId);
-
-      setVideos((current) =>
-        current.filter(
-          (saved) => saved.youtubeId !== video.youtubeId,
-        ),
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not remove saved video.',
-      );
-    }
+    // Let the shared save menu display failures and keep the checkbox unchanged.
+    await removeSavedVideo(video.youtubeId);
+    setVideos((current) => current.filter((saved) => saved.youtubeId !== video.youtubeId));
   }
 
   return (

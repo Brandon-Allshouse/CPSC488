@@ -4,7 +4,6 @@ import type { FeedVideo, VideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
 import { cn } from '@/lib/utils';
 import SaveMenu from './SaveMenu';
-import { Button } from '@/components/ui/button';
 
 // youtube-nocookie.com is YouTube's "privacy mode" player, which doesn't set tracking cookies
 // until you hit play. If you change either domain, update the CSP in vite.config.ts too.
@@ -86,6 +85,8 @@ export default function VideoCard({
   onTogglePlaylist,
   onCreatePlaylist,
 }: Props) {
+  const notebook = canSave && onToggleSaved ? { saved, onToggle: () => onToggleSaved(video) } : undefined;
+  const canUsePlaylists = playlists !== undefined && onTogglePlaylist !== undefined && onCreatePlaylist !== undefined;
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -171,9 +172,9 @@ export default function VideoCard({
 
       <section className="video-summary flex flex-col gap-2 rounded-xl border bg-card p-4" aria-label="Video summary">
         {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="video-title line-clamp-2 text-base sm:text-lg">{video.title}</h2>
-          <div className="video-feedback flex shrink-0 gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <h2 className="video-title min-w-0 flex-1 line-clamp-2 text-base sm:text-lg">{video.title}</h2>
+          <div className="video-feedback flex shrink-0 self-end gap-2 sm:self-auto">
             {onFeedbackChange && (
               <>
                 <FeedbackButton
@@ -194,13 +195,14 @@ export default function VideoCard({
                 />
               </>
             )}
-            {playlists && onTogglePlaylist && onCreatePlaylist && (
+            {(notebook || canUsePlaylists) && (
               <SaveMenu
                 youtubeId={video.youtubeId}
                 idPrefix={`video-${id}`}
-                playlists={playlists}
-                onToggle={(playlistId, save) => onTogglePlaylist(video.youtubeId, playlistId, save)}
-                onCreate={(name) => onCreatePlaylist(video.youtubeId, name)}
+                notebook={notebook}
+                playlists={canUsePlaylists ? playlists : undefined}
+                onToggle={onTogglePlaylist ? (playlistId, save) => onTogglePlaylist(video.youtubeId, playlistId, save) : undefined}
+                onCreate={onCreatePlaylist ? (name) => onCreatePlaylist(video.youtubeId, name) : undefined}
               />
             )}
           </div>
@@ -211,20 +213,6 @@ export default function VideoCard({
           <strong>Video Summary</strong>
         </p>
       </section>
-        
-      {canSave && onToggleSaved && (
-        <div className="video-action self-end">
-          <Button
-            type="button"
-            variant="secondary"
-            className="save-button"
-            onClick={() => void onToggleSaved(video)}
-            aria-pressed={saved}
-          >
-            {saved ? 'Saved' : 'Save'}
-          </Button>
-        </div>
-      )}
     </article>
   );
 }

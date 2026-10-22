@@ -675,3 +675,10 @@ Each video also has thumbs up/down buttons and a "Video Summary" box, but for no
 on screen. The thumbs choice isn't saved and resets when the page reloads, and the summary box is
 empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
 to shape the feed.
+
+
+## Study notebook
+
+Personal study notes, notebook search and filters, and text downloads are available inside
+**Your videos → Saved → Study notebook**. Setup, API details, validation steps, and contribution
+notes are in [docs/StudyNotebook.md](docs/StudyNotebook.md).

@@ -128,41 +128,41 @@ describe('VideoCard', () => {
     expect(container.querySelector('b')).toBeNull();
   });
 
-  it('lets a logged-in user save a video', () => {
-  const onToggleSaved = vi.fn();
+  it('lets a logged-in user save a video to the notebook from the bookmark menu', async () => {
+    const onToggleSaved = vi.fn().mockResolvedValue(undefined);
+    render(<VideoCard video={video} canSave saved={false} onToggleSaved={onToggleSaved} />);
 
-  render(
-    <VideoCard
-      video={video}
-      canSave
-      saved={false}
-      onToggleSaved={onToggleSaved}
-    />,
-  );
-
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Save' }),
-  );
-
-  expect(onToggleSaved).toHaveBeenCalledWith(video);
- });
-
-  it('shows when a video is already saved', () => {
-  render(
-    <VideoCard
-      video={video}
-      canSave
-      saved
-      onToggleSaved={() => undefined}
-    />,
-  );
-
-  const button = screen.getByRole('button', {
-    name: 'Saved',
+    fireEvent.click(screen.getByRole('button', { name: 'Save video' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Study notebook' }));
+    await waitFor(() => expect(onToggleSaved).toHaveBeenCalledWith(video));
   });
 
-  expect(button.getAttribute('aria-pressed')).toBe('true');
-});
+  it('shows the notebook saved state inside the bookmark menu', () => {
+    render(<VideoCard video={video} canSave saved onToggleSaved={() => undefined} />);
+    const button = screen.getByRole('button', { name: 'Saved. Change save locations' });
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(button);
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' }).checked).toBe(true);
+  });
+
+  it('uses one bookmark button for both notebook and playlist actions', () => {
+    render(
+      <VideoCard
+        video={video}
+        canSave
+        onToggleSaved={() => undefined}
+        playlists={[{ id: 1, name: 'Watch later', watchLater: true, videos: [] }]}
+        onTogglePlaylist={vi.fn().mockResolvedValue(undefined)}
+        onCreatePlaylist={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    expect(screen.getAllByRole('button', { name: 'Save video' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Save video' }));
+    expect(screen.getByRole('checkbox', { name: 'Study notebook' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Watch later' })).toBeTruthy();
+  });
+
   it('shows channel names with HTML in them as plain text', () => {
     // channel names come from YouTube too
     const { container } = renderVideoCard({ ...video, channelTitle: '<i>Test Channel</i>' });

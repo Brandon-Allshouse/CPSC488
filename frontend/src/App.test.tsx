@@ -28,6 +28,8 @@ vi.mock('./api/feed', () => ({
   fetchFeed: vi.fn(),
   saveMyVideoFeedback: vi.fn(),
 }));
+vi.mock('./api/studyNotes', () => ({ fetchStudyNotes: vi.fn().mockResolvedValue([]), saveStudyNote: vi.fn() }));
+
 vi.mock('./api/savedVideos', () => ({
   fetchSavedVideos: vi.fn().mockResolvedValue([]),
   saveVideo: vi.fn().mockResolvedValue(undefined),

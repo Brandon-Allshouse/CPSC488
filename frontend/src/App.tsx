@@ -5,7 +5,6 @@ import { fetchMyInterests, saveMyInterests } from './api/feed';
 import LoginPage from './pages/LoginPage';
 import InterestsPage from './pages/InterestsPage';
 import FeedPage from './pages/FeedPage';
-import SavedVideosPage from './pages/SavedVideosPage';
 
 function LoadingScreen() {
   return (
@@ -30,7 +29,6 @@ export default function App() {
   const [interests, setInterests] = useState<number[] | null>(null);
   const [editingInterests, setEditingInterests] = useState(false);
 
-  const [showSavedVideos, setShowSavedVideos] = useState(false);
 
   function startUserSession(user: User) {
     setSession({ kind: 'user', user });
@@ -57,7 +55,6 @@ export default function App() {
     setSession({ kind: 'anonymous' });
     setInterests(null);
     setEditingInterests(false);
-    setShowSavedVideos(false);
   }
 
   async function handleSaveInterests(topicIds: number[]) {
@@ -96,13 +93,6 @@ export default function App() {
           />
         );
       }
-      if (showSavedVideos && user) {
-        return (
-          <SavedVideosPage
-            onBack={() => setShowSavedVideos(false)}
-    />
-  );
-}
       return (
         <FeedPage
           // A new key when interests change makes React start a fresh feed.
@@ -111,7 +101,6 @@ export default function App() {
           user={user}
           onEditInterests={() => setEditingInterests(true)}
           onLogout={handleLogout}
-          onSavedVideos={() => setShowSavedVideos(true)}
         />
       );
     }
