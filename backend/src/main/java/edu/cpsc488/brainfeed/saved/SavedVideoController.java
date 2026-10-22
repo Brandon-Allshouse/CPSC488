@@ -7,10 +7,13 @@ import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 /**
- * Endpoints for a logged-in user's saved videos.
+ * Endpoints for a logged-in user's saved videos (the Study notebook). The user always comes from the
+ * session cookie, never from the request, so nobody can read or change another user's list.
  */
 public class SavedVideoController {
 
@@ -18,14 +21,16 @@ public class SavedVideoController {
             Pattern.compile("^[A-Za-z0-9_-]{11}$");
 
     private final SavedVideoRepository savedVideos;
-    private final AuthController auth;
+    private final Function<Context, Optional<User>> currentUser;
 
-    public SavedVideoController(
-            SavedVideoRepository savedVideos,
-            AuthController auth
-    ) {
+    public SavedVideoController(SavedVideoRepository savedVideos, AuthController auth) {
+        this(savedVideos, auth::currentUser);
+    }
+
+    // Lets tests pick the logged-in user without a real session.
+    SavedVideoController(SavedVideoRepository savedVideos, Function<Context, Optional<User>> currentUser) {
         this.savedVideos = savedVideos;
-        this.auth = auth;
+        this.currentUser = currentUser;
     }
 
     public void register(RoutesConfig routes) {
@@ -66,7 +71,7 @@ public class SavedVideoController {
     }
 
     private User requireUser(Context ctx) {
-        return auth.currentUser(ctx)
+        return currentUser.apply(ctx)
                 .orElseThrow(() ->
                         ApiException.unauthorized("Not logged in."));
     }

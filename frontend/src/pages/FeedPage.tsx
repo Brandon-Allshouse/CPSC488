@@ -49,26 +49,28 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  // Videos in the Study notebook, so each card's bookmark shows whether it's saved there.
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if(!user) {
+    if (!user) {
       setSavedIds(new Set());
       return;
     }
-
+    let cancelled = false;
     fetchSavedVideos()
-    .then((saved) => {
-            setSavedIds(
-    new Set(saved.map((video) => video.youtubeId)),
-    );
-})
-.catch(() => {
-  // The feed still works even if saved videos fail to load.
-  setSavedIds(new Set());
-});
-}, [user]);
+      .then((saved) => {
+        if (!cancelled) setSavedIds(new Set(saved.map((video) => video.youtubeId)));
+      })
+      .catch(() => {
+        // The feed still works even if saved videos fail to load.
+        if (!cancelled) setSavedIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackByVideo, setFeedbackByVideo] = useState<Record<string, VideoFeedback>>({});
   const feedbackChanges = useRef<Record<string, VideoFeedback | null>>({});
@@ -257,35 +259,25 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     });
   }
 
-async function toggleSaved(video: FeedVideo) {
-  if (!user) return;
-
-  const currentlySaved = savedIds.has(video.youtubeId);
-
-  try {
-    if (currentlySaved) {
-      await removeSavedVideo(video.youtubeId);
-
+  // Adds the video to the Study notebook, or takes it out if it's already there.
+  async function toggleSaved(video: FeedVideo) {
+    if (!user) return;
+    const save = !savedIds.has(video.youtubeId);
+    try {
+      await (save ? saveVideo(video.youtubeId) : removeSavedVideo(video.youtubeId));
       setSavedIds((current) => {
         const next = new Set(current);
-        next.delete(video.youtubeId);
+        if (save) next.add(video.youtubeId);
+        else next.delete(video.youtubeId);
         return next;
       });
-    } else {
-      await saveVideo(video.youtubeId);
-
-      setSavedIds((current) => {
-        const next = new Set(current);
-        next.add(video.youtubeId);
-        return next;
-      });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) onLogout();
+      // The save menu shows this error. A failed save must not stop feed pagination.
+      throw err;
     }
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 401) onLogout();
-    // The save menu owns this error. A failed save must not stop feed pagination.
-    throw err;
   }
-}
+
   // Each video is as tall as the list, so scrolling by the list's height moves exactly one video.
   function scrollFeed(direction: -1 | 1) {
     const list = listRef.current;

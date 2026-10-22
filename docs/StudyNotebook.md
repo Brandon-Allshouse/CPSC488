@@ -6,6 +6,7 @@ to write your own study notes. Playlists continue to organize videos independent
 
 ## Features
 
+- Keep up to 500 videos in the notebook.
 - Add, edit and clear a personal note of up to 2,000 characters for each notebook video.
 - Save explicitly with **Save note** or **Ctrl+Enter**. Failed requests retain the current draft.
 - Search titles, creators and saved note text. Filter videos with or without notes.
@@ -20,8 +21,12 @@ to write your own study notes. Playlists continue to organize videos independent
 | --- | --- |
 | `frontend/src/components/StudyNotebook.tsx` | Search controls, filters, video actions, note editor and feedback |
 | `frontend/src/lib/studyNotebook.ts` | Search/filter logic and plain text export |
+| `frontend/src/api/savedVideos.ts` | Adds, removes and lists notebook videos |
 | `frontend/src/api/studyNotes.ts` | Calls the backend through the existing shared request helper |
 | `frontend/src/pages/YourVideosPage.tsx` | Embeds the notebook in the existing Saved tab and protects unfinished drafts |
+| `backend/.../saved/SavedVideoController.java` | Session checks and video id validation for notebook videos |
+| `backend/.../saved/SavedVideoRepository.java` | Owner-scoped SQL and the 500-video limit |
+| `backend/.../migration/V10__saved_videos.sql` | The notebook's video list |
 | `backend/.../saved/StudyNoteController.java` | Session checks, strict JSON validation and note endpoints |
 | `backend/.../saved/StudyNoteRepository.java` | Parameterized, owner-scoped SQL |
 | `backend/.../migration/V11__study_notes.sql` | Adds note storage linked to existing saved-video entries |

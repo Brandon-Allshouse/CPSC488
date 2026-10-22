@@ -549,17 +549,6 @@ of its sub-subjects. The list comes back with subjects first (A to Z), then sub-
 order they're usually learned. To add one, insert a row in a new migration (see
 `V4__subjects_and_subtopics.sql`).
 
-## Saved Videos API
-
-| Method | Path                              | Body | Success response |
-|--------|-----------------------------------|------|------------------|
-| GET    | `/api/me/saved-videos`            | none | `200 { videos }` |
-| POST   | `/api/me/saved-videos/{youtubeId}`| none | `204` |
-| DELETE | `/api/me/saved-videos/{youtubeId}`| none | `204` |
-
-All saved-video endpoints require the user to be logged in.
-Saved videos are returned newest-first.
-
 The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
 `nextPage` is null at the end. `fetching` is true when some of the topics have never been searched
 and that search is happening now, so ask for page 0 again in a few seconds.
@@ -604,6 +593,21 @@ A `playlist` is `{ id, name, watchLater, videos }`, and its `videos` are `{ yout
 newest-saved first. Names are trimmed and must be 1-50 characters on one line; "Watch later" is
 reserved, and names are compared ignoring case ("Math" and "math" are the same). Deleting a playlist
 doesn't touch the videos themselves, and a video an admin bans disappears from every playlist.
+
+## Study notebook API
+
+The Study notebook is a private list of saved videos with a personal note on each, separate from
+playlists (a video can be in both). All endpoints need a login (`401` otherwise) and the user
+always comes from the session cookie. Each user can keep up to 500 notebook videos. More detail
+and manual test steps are in [docs/StudyNotebook.md](docs/StudyNotebook.md).
+
+| Method | Path                                  | Body       | Success response                                                       |
+|--------|---------------------------------------|------------|------------------------------------------------------------------------|
+| GET    | `/api/me/saved-videos`                | none       | `200 { videos }`, newest-saved first                                   |
+| POST   | `/api/me/saved-videos/{youtubeId}`    | none       | `204`; saving one that's already there is fine. `404` if the video isn't in our database, `409` if the notebook is full |
+| DELETE | `/api/me/saved-videos/{youtubeId}`    | none       | `204`; also deletes that video's note                                  |
+| GET    | `/api/me/study-notes`                 | none       | `200 { notes: [{ youtubeId, note, updatedAt }] }`, newest edit first   |
+| PUT    | `/api/me/study-notes/{youtubeId}`     | `{ note }` | `200 { note }`; an empty note clears the text. `400` if over 2,000 characters, `404` if the video isn't in their notebook |
 
 ## Admin API
 
@@ -676,9 +680,3 @@ on screen. The thumbs choice isn't saved and resets when the page reloads, and t
 empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
 to shape the feed.
 
-
-## Study notebook
-
-Personal study notes, notebook search and filters, and text downloads are available inside
-**Your videos → Saved → Study notebook**. Setup, API details, validation steps, and contribution
-notes are in [docs/StudyNotebook.md](docs/StudyNotebook.md).

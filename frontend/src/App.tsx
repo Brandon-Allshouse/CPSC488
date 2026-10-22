@@ -29,7 +29,6 @@ export default function App() {
   const [interests, setInterests] = useState<number[] | null>(null);
   const [editingInterests, setEditingInterests] = useState(false);
 
-
   function startUserSession(user: User) {
     setSession({ kind: 'user', user });
     setInterests(null);
