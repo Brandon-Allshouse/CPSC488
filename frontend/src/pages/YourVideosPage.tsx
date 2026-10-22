@@ -1,8 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { Bookmark, CircleAlert, History, ListVideo, Loader2, Plus, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { BookOpen, Bookmark, CircleAlert, History, ListVideo, Loader2, Plus, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { fetchMyVideoFeedback, type MyVideoFeedback, type SavedVideo } from '../api/feed';
 import type { Playlist } from '../api/playlists';
+import { fetchSavedVideos } from '../api/savedVideos';
+import StudyNotebook from '../components/StudyNotebook';
 import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +19,8 @@ type Tab = 'saved' | 'liked' | 'disliked';
 interface Props extends PageNavigation {
   /** Goes back to the feed and shows this video there. */
   onOpenVideo: (video: SavedVideo) => void;
+  /** Removes a notebook entry and updates the feed's saved indicator. */
+  onRemoveNotebookVideo: (youtubeId: string) => Promise<void>;
   /** The user's playlists, kept by FeedPage so the feed's Save buttons stay in step. null while loading. */
   playlists: Playlist[] | null;
   /** Set if the playlists couldn't be loaded, so the Saved tab shows it instead of loading forever. */
@@ -26,10 +30,11 @@ interface Props extends PageNavigation {
   onRemoveFromPlaylist: (playlistId: number, youtubeId: string) => Promise<void>;
 }
 
-// "Your videos": saved playlists, and liked and disliked videos. All saved on the server, so
+// "Your videos": the study notebook, saved playlists, and liked and disliked videos. All saved on the server, so
 // signed-in users only. Watch history has its own page (WatchHistoryPage), linked from here.
 export default function YourVideosPage({
   onOpenVideo,
+  onRemoveNotebookVideo,
   playlists,
   playlistsError = null,
   onCreatePlaylist,
@@ -45,6 +50,53 @@ export default function YourVideosPage({
   const [newName, setNewName] = useState('');
   const [playlistError, setPlaylistError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [notebookVideos, setNotebookVideos] = useState<SavedVideo[] | null>(null);
+  const [notebookLoadError, setNotebookLoadError] = useState<string | null>(null);
+  const [notebookActionError, setNotebookActionError] = useState<string | null>(null);
+  const [notebookBusy, setNotebookBusy] = useState(false);
+  const notebookPending = useRef(false);
+  const [notebookDirty, setNotebookDirty] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNotebookVideos(null);
+    setNotebookLoadError(null);
+    setNotebookActionError(null);
+    if (!user) return;
+    fetchSavedVideos()
+      .then((videos) => {
+        if (!cancelled) {
+          setNotebookVideos(videos.map((video) => ({
+            youtubeId: video.youtubeId,
+            title: video.title,
+            creator: video.channelTitle,
+          })));
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) onLogout();
+        else setNotebookLoadError(err instanceof Error ? err.message : 'Could not load your study collection.');
+      });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  async function removeNotebookEntry(youtubeId: string) {
+    if (notebookPending.current) return;
+    notebookPending.current = true;
+    setNotebookBusy(true);
+    setNotebookActionError(null);
+    try {
+      await onRemoveNotebookVideo(youtubeId);
+      setNotebookVideos((current) => current?.filter((video) => video.youtubeId !== youtubeId) ?? []);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) onLogout();
+      else setNotebookActionError(err instanceof Error ? err.message : 'Could not remove this study video.');
+    } finally {
+      notebookPending.current = false;
+      setNotebookBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) {
@@ -205,7 +257,44 @@ export default function YourVideosPage({
     );
   }
 
-  function savedTab() {
+  function leaveNotebook(action: () => void) {
+    if (!notebookDirty || window.confirm('Discard your unsaved note changes?')) action();
+  }
+
+  const guardedNavigation = {
+    ...navigation,
+    onBack: () => leaveNotebook(navigation.onBack),
+    onEditInterests: () => leaveNotebook(navigation.onEditInterests),
+    onShowLikedVideos: () => leaveNotebook(navigation.onShowLikedVideos),
+    onShowLeaderboard: () => leaveNotebook(navigation.onShowLeaderboard),
+    onShowHistory: navigation.onShowHistory ? () => leaveNotebook(navigation.onShowHistory!) : undefined,
+    onShowAdmin: navigation.onShowAdmin ? () => leaveNotebook(navigation.onShowAdmin!) : undefined,
+    onLogout: () => leaveNotebook(navigation.onLogout),
+  };
+
+  function notebookSection() {
+    if (!user) return null;
+    let body: ReactNode;
+    if (notebookLoadError) body = errorAlert(notebookLoadError);
+    else if (notebookVideos === null) body = loadingMessage('Loading study collection.');
+    else body = (
+      <div className="space-y-3">
+        {notebookActionError && errorAlert(notebookActionError)}
+        {notebookBusy && <p role="status" className="text-xs text-muted-foreground">Removing study video...</p>}
+        <StudyNotebook
+          videos={notebookVideos}
+          removing={notebookBusy}
+          onOpenVideo={(video) => leaveNotebook(() => onOpenVideo(video))}
+          onRemoveVideo={removeNotebookEntry}
+          onSessionExpired={onLogout}
+          onDirtyChange={setNotebookDirty}
+        />
+      </div>
+    );
+    return section('study-notebook-title', 'Study notebook', <BookOpen aria-hidden="true" className="size-5 shrink-0 text-primary" />, notebookVideos?.length, body);
+  }
+
+  function playlistSections() {
     if (playlists === null) {
       let body: ReactNode;
       if (!user) body = signInMessage('saved videos');
@@ -275,21 +364,33 @@ export default function YourVideosPage({
     );
   }
 
+  function savedTab() {
+    return <>{notebookSection()}{playlistSections()}</>;
+  }
+
+  // A video in the notebook and a playlist still counts as one saved video.
+  const savedCount = user && (notebookVideos !== null || playlists !== null)
+    ? new Set([
+        ...(notebookVideos ?? []).map((video) => video.youtubeId),
+        ...(playlists ?? []).flatMap((playlist) => playlist.videos.map((video) => video.youtubeId)),
+      ]).size
+    : undefined;
+
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: 'saved', label: 'Saved', count: playlists?.reduce((sum, p) => sum + p.videos.length, 0) },
+    { key: 'saved', label: 'Saved', count: savedCount },
     { key: 'liked', label: 'Liked', count: feedback?.likedVideos.length },
     { key: 'disliked', label: 'Disliked', count: feedback?.dislikedVideos.length },
   ];
 
   return (
     <PageLayout
-      {...navigation}
+      {...guardedNavigation}
       name="your-videos"
       title="Your videos"
       description="Only you can see these lists. Click a title to watch it in your feed."
       actions={
         navigation.onShowHistory && (
-          <Button variant="outline" size="sm" onClick={navigation.onShowHistory}>
+          <Button variant="outline" size="sm" onClick={guardedNavigation.onShowHistory}>
             <History aria-hidden="true" />
             Watch history
           </Button>
@@ -309,7 +410,7 @@ export default function YourVideosPage({
               '-mb-px cursor-pointer border-b-2 border-transparent px-4 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:text-foreground',
               tab === key && 'border-primary text-primary hover:text-primary',
             )}
-            onClick={() => setTab(key)}
+            onClick={() => { if (key !== tab) leaveNotebook(() => setTab(key)); }}
           >
             {label}
             {count !== undefined && <span className="ml-1.5 text-xs opacity-70">({count})</span>}

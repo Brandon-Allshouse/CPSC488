@@ -22,6 +22,10 @@ import edu.cpsc488.brainfeed.feed.PlaylistRepository;
 import edu.cpsc488.brainfeed.feed.TopicRepository;
 import edu.cpsc488.brainfeed.feed.VideoRepository;
 import edu.cpsc488.brainfeed.feed.YouTubeClient;
+import edu.cpsc488.brainfeed.saved.SavedVideoController;
+import edu.cpsc488.brainfeed.saved.SavedVideoRepository;
+import edu.cpsc488.brainfeed.saved.StudyNoteController;
+import edu.cpsc488.brainfeed.saved.StudyNoteRepository;
 import edu.cpsc488.brainfeed.history.WatchHistoryController;
 import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
 import io.javalin.Javalin;
@@ -96,6 +100,11 @@ public class App {
 
         TopicRepository topics = new TopicRepository(dataSource);
         VideoRepository videos = new VideoRepository(dataSource);
+
+        SavedVideoRepository savedVideos = new SavedVideoRepository(dataSource);
+        SavedVideoController savedVideoController = new SavedVideoController(savedVideos, auth);
+        StudyNoteController studyNotes = new StudyNoteController(new StudyNoteRepository(dataSource), auth);
+        
         // Optional: without a key the app still runs, but no new videos are fetched.
         String youtubeKey = settings.get("YOUTUBE_API_KEY", null);
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -157,6 +166,8 @@ public class App {
             config.routes.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
             auth.register(config.routes);
             feed.register(config.routes);
+            savedVideoController.register(config.routes);
+            studyNotes.register(config.routes);
             admin.register(config.routes);
             history.register(config.routes);
             playlists.register(config.routes);

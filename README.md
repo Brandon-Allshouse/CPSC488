@@ -549,6 +549,17 @@ of its sub-subjects. The list comes back with subjects first (A to Z), then sub-
 order they're usually learned. To add one, insert a row in a new migration (see
 `V4__subjects_and_subtopics.sql`).
 
+## Saved Videos API
+
+| Method | Path                              | Body | Success response |
+|--------|-----------------------------------|------|------------------|
+| GET    | `/api/me/saved-videos`            | none | `200 { videos }` |
+| POST   | `/api/me/saved-videos/{youtubeId}`| none | `204` |
+| DELETE | `/api/me/saved-videos/{youtubeId}`| none | `204` |
+
+All saved-video endpoints require the user to be logged in.
+Saved videos are returned newest-first.
+
 The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
 `nextPage` is null at the end. `fetching` is true when some of the topics have never been searched
 and that search is happening now, so ask for page 0 again in a few seconds.
@@ -664,3 +675,10 @@ Each video also has thumbs up/down buttons and a "Video Summary" box, but for no
 on screen. The thumbs choice isn't saved and resets when the page reloads, and the summary box is
 empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
 to shape the feed.
+
+
+## Study notebook
+
+Personal study notes, notebook search and filters, and text downloads are available inside
+**Your videos → Saved → Study notebook**. Setup, API details, validation steps, and contribution
+notes are in [docs/StudyNotebook.md](docs/StudyNotebook.md).

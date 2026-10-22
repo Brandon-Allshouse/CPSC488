@@ -128,4 +128,12 @@ describe('FeedHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Watch history' }));
     expect(onShowHistory).toHaveBeenCalledTimes(1);
   });
+
+  it('offers one Your videos destination without a duplicate Saved page', () => {
+    render(<FeedHeader user={testUser} {...handlers} />);
+    fireEvent.click(screen.getByText('Profile'));
+    expect(screen.getAllByRole('button', { name: 'Your videos' })).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
+  });
+
 });

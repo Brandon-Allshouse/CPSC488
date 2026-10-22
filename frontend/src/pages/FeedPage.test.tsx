@@ -12,7 +12,17 @@ import {
 import { fetchWatchHistory, recordWatch } from '../api/history';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import { addToPlaylist, createPlaylist, fetchMyPlaylists, type Playlist } from '../api/playlists';
+import { fetchSavedVideos, removeSavedVideo, saveVideo } from '../api/savedVideos';
 import FeedPage from './FeedPage';
+
+vi.mock('../api/studyNotes', () => ({ fetchStudyNotes: vi.fn().mockResolvedValue([]), saveStudyNote: vi.fn() }));
+
+vi.mock('../api/savedVideos', () => ({
+  fetchSavedVideos: vi.fn().mockResolvedValue([]),
+  saveVideo: vi.fn().mockResolvedValue(undefined),
+  removeSavedVideo: vi.fn().mockResolvedValue(undefined),
+}));
+
 
 // The admin page loads its own data; empty answers are enough to check the navigation.
 vi.mock('../api/admin', () => ({
@@ -61,7 +71,7 @@ const onLogout = vi.fn();
 
 function renderFeed(user = testUser as typeof testUser | null) {
   const result = render(
-    <FeedPage topicIds={[1, 2]} user={user} onEditInterests={onEditInterests} onLogout={onLogout} />,
+    <FeedPage topicIds={[1, 2]} user={user} onEditInterests={onEditInterests} onLogout={onLogout}/>,
   );
   // the invisible marker at the bottom of the feed that triggers loading more
   const scrollToBottom = () => scrollInto(result.container.querySelector('.feed-sentinel')!);
@@ -70,6 +80,11 @@ function renderFeed(user = testUser as typeof testUser | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchSavedVideos).mockReset().mockResolvedValue([]);
+  vi.mocked(saveVideo).mockReset().mockResolvedValue(undefined);
+  vi.mocked(removeSavedVideo).mockReset().mockResolvedValue(undefined);
+  vi.mocked(fetchMyPlaylists).mockReset().mockResolvedValue([]);
+  vi.mocked(addToPlaylist).mockReset().mockResolvedValue(undefined);
   // clearAllMocks keeps queued mockResolvedValueOnce answers, so a test that stopped early would
   // hand its leftover pages to the next test. Reset fetchFeed completely instead.
   vi.mocked(fetchFeed).mockReset();
@@ -96,6 +111,67 @@ async function settle() {
 const stillFinding = { videos: [], nextPage: null, fetching: true };
 
 describe('FeedPage', () => {
+  it('keeps notebook and playlist saves independent inside one bookmark menu', async () => {
+    const video = makeVideo(1);
+    const watchLater: Playlist = { id: 12, name: 'Watch later', watchLater: true, videos: [] };
+    vi.mocked(fetchMyPlaylists).mockResolvedValue([watchLater]);
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [video], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    await act(async () => { scrollToBottom(); });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save video' }));
+    const notebook = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' });
+    fireEvent.click(notebook);
+    await waitFor(() => expect(notebook.checked).toBe(true));
+    await waitFor(() => expect(notebook.disabled).toBe(false));
+    expect(saveVideo).toHaveBeenCalledWith(video.youtubeId);
+    expect(addToPlaylist).not.toHaveBeenCalled();
+
+    vi.mocked(fetchMyPlaylists).mockResolvedValue([
+      { ...watchLater, videos: [{ youtubeId: video.youtubeId, title: video.title, creator: video.channelTitle }] },
+    ]);
+    const playlist = screen.getByRole<HTMLInputElement>('checkbox', { name: 'Watch later' });
+    fireEvent.click(playlist);
+    await waitFor(() => expect(playlist.checked).toBe(true));
+    await waitFor(() => expect(notebook.disabled).toBe(false));
+    expect(addToPlaylist).toHaveBeenCalledWith(12, video.youtubeId);
+    expect(saveVideo).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(notebook);
+    await waitFor(() => expect(notebook.checked).toBe(false));
+    expect(removeSavedVideo).toHaveBeenCalledWith(video.youtubeId);
+    expect(playlist.checked).toBe(true);
+    expect(addToPlaylist).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Saved. Change save locations' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows a failed notebook save in its menu and can still load the next feed page', async () => {
+    vi.mocked(saveVideo).mockRejectedValue(new Error('Could not save this video.'));
+    vi.mocked(fetchFeed)
+      .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: 1, fetching: false })
+      .mockResolvedValueOnce({ videos: [makeVideo(2)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    await act(async () => { scrollToBottom(); });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save video' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Study notebook' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save this video.');
+    expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Study notebook' }).checked).toBe(false);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await act(async () => { scrollToBottom(); });
+    expect(await screen.findByText('Test video 2')).toBeTruthy();
+    expect(addToPlaylist).not.toHaveBeenCalled();
+  });
+
+  it('hides private save actions and makes no saved-list request for guests', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed(null);
+    scrollToBottom();
+    await screen.findByText('Test video 1');
+    expect(fetchSavedVideos).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Save video' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
+  });
+
   it('shows the brain logo in the bottom-right corner', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
@@ -177,6 +253,36 @@ describe('FeedPage', () => {
     expect(fetchFeed).toHaveBeenCalledWith([1, 2], expect.any(Number), 0);
   });
 
+  it('opens the notebook through Your videos instead of a separate Saved page', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    vi.mocked(fetchSavedVideos).mockResolvedValue([{ ...makeVideo(91), title: 'Notebook lesson' }]);
+    renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
+    expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
+    expect(await within(screen.getByRole('region', { name: 'Study notebook' })).findByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
+  });
+
+  it('updates the feed bookmark after removing a notebook video from Your videos', async () => {
+    const video = makeVideo(1);
+    vi.mocked(fetchSavedVideos).mockResolvedValue([video]);
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [video], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    await act(async () => { scrollToBottom(); });
+    expect(await screen.findByRole('button', { name: 'Saved. Change save locations' })).toBeTruthy();
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    const notebook = screen.getByRole('region', { name: 'Study notebook' });
+    const remove = await within(notebook).findByRole<HTMLButtonElement>('button', { name: 'Remove Test video 1 from Study notebook' });
+    await waitFor(() => expect(remove.disabled).toBe(false));
+    fireEvent.click(remove);
+    await waitFor(() => expect(within(notebook).queryByRole('button', { name: 'Test video 1' })).toBeNull());
+    expect(removeSavedVideo).toHaveBeenCalledWith(video.youtubeId);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
+    expect(screen.getByRole('button', { name: 'Save video' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('loads saved choices and persists a changed video choice', async () => {
     const savedVideo: SavedVideo = {
       youtubeId: 'video000001',
@@ -207,16 +313,23 @@ describe('FeedPage', () => {
     expect(saveMyVideoFeedback).not.toHaveBeenCalled();
   });
 
-  it('loads the next page when scrolling to the bottom, with the same seed', async () => {
+    it('loads the next page when scrolling to the bottom, with the same seed', async () => {
     vi.mocked(fetchFeed)
       .mockResolvedValueOnce({ videos: [makeVideo(1)], nextPage: 1, fetching: false })
       .mockResolvedValueOnce({ videos: [makeVideo(2)], nextPage: null, fetching: false });
     const { scrollToBottom } = renderFeed();
 
-    scrollToBottom();
-    await screen.findByText('Test video 1');
-    scrollToBottom();
-    await screen.findByText('Test video 2');
+    await act(async () => {
+      scrollToBottom();
+    });
+    expect(await screen.findByText('Test video 1')).toBeTruthy();
+
+    await act(async () => {
+      scrollToBottom();
+    });
+    expect(await screen.findByText('Test video 2')).toBeTruthy();
+
+    expect(fetchFeed).toHaveBeenCalledTimes(2);
 
     const firstSeed = vi.mocked(fetchFeed).mock.calls[0][1];
     expect(vi.mocked(fetchFeed).mock.calls[1]).toEqual([[1, 2], firstSeed, 1]);
@@ -563,7 +676,7 @@ describe('FeedPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Save video' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Watch later' }));
 
-    expect(await screen.findByRole('button', { name: 'Saved. Change playlists' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Saved. Change save locations' })).toBeTruthy();
     expect(addToPlaylist).toHaveBeenCalledWith(1, 'video000001');
   });
 
