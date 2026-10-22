@@ -65,6 +65,8 @@ frontend/                     React app (Vite project)
   src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
   src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
+                                FeedSidebar and UpNext (the feed's left and right columns on wide screens),
+                                ThemeToggle (light/dark switch),
                                 SaveMenu (a video's bookmark button and "Save to…" playlist menu),
                                 LanguageSelect (language picker on the interests page; UI only for now)
   src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
@@ -304,6 +306,9 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
   save the video there, untick to remove it, or type a name to make a new playlist with the video in
   it. The button is filled in when the video is in any playlist. Playlists are managed on the
   Saved tab of "Your videos".
+- **The feed's side columns** show on wide screens only. The left one has the same links as the
+  Profile menu plus the topics the feed is built from. The right one ("Up next", 1280px and wider)
+  lists the next five videos (click one to jump to it) and the keyboard shortcuts.
 - **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
   Escape or a click outside it.
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
+import { timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import SaveMenu from './SaveMenu';
 
@@ -12,6 +13,8 @@ const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 
 interface Props {
   video: FeedVideo;
+  /** Shown as a tag next to the channel, e.g. "Algebra 2". */
+  topicName?: string;
   saved?: boolean;
   canSave?: boolean;
   /** The original private saved-video list, separate from playlists. */
@@ -74,6 +77,7 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
 export default function VideoCard({
   video,
+  topicName,
   saved = false,
   canSave = false,
   onToggleSaved,
@@ -87,6 +91,7 @@ export default function VideoCard({
 }: Props) {
   const notebook = canSave && onToggleSaved ? { saved, onToggle: () => onToggleSaved(video) } : undefined;
   const canUsePlaylists = playlists !== undefined && onTogglePlaylist !== undefined && onCreatePlaylist !== undefined;
+  const published = timeAgo(video.publishedAt);
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
@@ -207,11 +212,27 @@ export default function VideoCard({
             )}
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">{video.channelTitle}</p>
-        {/* Placeholder heading. The summary text will come from the LLM summaries on the roadmap. */}
-        <p className="video-summary-label mt-1 border-t pt-3 text-sm">
-          <strong>Video Summary</strong>
-        </p>
+        <div className="video-meta flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+          <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+            <span
+              aria-hidden="true"
+              className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary uppercase"
+            >
+              {video.channelTitle.charAt(0)}
+            </span>
+            <span className="truncate">{video.channelTitle}</span>
+          </span>
+          {topicName && <span className="rounded-full border bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">{topicName}</span>}
+          {published && <span className="text-xs">{published}</span>}
+        </div>
+        {/* Placeholder until the LLM summaries on the roadmap fill it in. */}
+        <div className="video-summary-label mt-1 flex flex-col gap-1 rounded-lg bg-muted/60 p-3 text-sm">
+          <p className="flex items-center gap-2">
+            <Sparkles aria-hidden="true" className="size-4 text-primary" />
+            <strong>Video Summary</strong>
+          </p>
+          <p className="text-muted-foreground">Key points for this video are on the way.</p>
+        </div>
       </section>
     </article>
   );

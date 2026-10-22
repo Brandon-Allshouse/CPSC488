@@ -5,14 +5,17 @@ import { ApiError } from '../api/client';
 import {
   fetchFeed,
   fetchMyVideoFeedback,
+  fetchTopics,
   saveMyVideoFeedback,
   type FeedVideo,
   type SavedVideo,
+  type Topic,
   type VideoFeedback,
 } from '../api/feed';
 import { addToPlaylist, createPlaylist, deletePlaylist, fetchMyPlaylists, removeFromPlaylist, type Playlist } from '../api/playlists';
-import brainLogo from '../assets/brainfeed-logo.png';
 import FeedHeader from '../components/FeedHeader';
+import FeedSidebar from '../components/FeedSidebar';
+import UpNext from '../components/UpNext';
 import VideoCard, { videoCardId } from '../components/VideoCard';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -49,6 +52,24 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   const [nextPage, setNextPage] = useState<number | null>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which video fills the feed right now, for the "Up next" column.
+  const [currentIndex, setCurrentIndex] = useState(0);
+  // Topic names for the sidebar and the tag on each video. Empty until loaded (or if that fails).
+  const [topics, setTopics] = useState<Topic[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTopics()
+      .then((loaded) => {
+        if (!cancelled) setTopics(loaded);
+      })
+      // Only labels depend on this, so the feed works fine without it.
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Videos in the Study notebook, so each card's bookmark shows whether it's saved there.
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
@@ -278,6 +299,17 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     }
   }
 
+  // Each video is exactly as tall as the list, so the scroll position says which one is showing.
+  function handleFeedScroll() {
+    const list = listRef.current;
+    if (list && list.clientHeight > 0) setCurrentIndex(Math.round(list.scrollTop / list.clientHeight));
+  }
+
+  function scrollToVideo(index: number) {
+    const list = listRef.current;
+    if (list) list.scrollTo({ top: index * list.clientHeight, behavior: 'smooth' });
+  }
+
   // Each video is as tall as the list, so scrolling by the list's height moves exactly one video.
   function scrollFeed(direction: -1 | 1) {
     const list = listRef.current;
@@ -365,6 +397,9 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
     // because leaving the feed removes the marker and coming back draws a new one to watch.
   }, [nextPage, error, view]);
 
+  const topicName = new Map(topics.map((topic) => [topic.id, topic.name]));
+  const pickedTopicNames = topicIds.flatMap((id) => topicName.get(id) ?? []);
+
   const isEmpty = videos.length === 0 && nextPage === null && !loading && !error && !finding;
 
   const navigation = {
@@ -398,11 +433,6 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   return (
     <div id="feed-page" className="feed-page flex h-dvh flex-col">
-      <img
-        className="feed-logo pointer-events-none fixed right-4 bottom-4 z-10 hidden size-16 rounded-xl object-cover opacity-80 shadow-lg lg:block"
-        src={brainLogo}
-        alt="BrainFeed brain logo"
-      />
       <FeedHeader
         user={user}
         onGoHome={scrollToTop}
@@ -414,75 +444,94 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
         onLogout={onLogout}
       />
 
-      <nav
-        // Hidden on phones, where people swipe instead and the buttons would cover the video.
-        className="feed-scroll-controls fixed top-1/2 right-6 z-10 hidden -translate-y-1/2 flex-col gap-2 sm:flex"
-        aria-label="Feed navigation"
-      >
-        <Button variant="outline" size="icon" className="rounded-full bg-card/80 backdrop-blur" aria-label="Scroll up" title="Previous video (↑ or K)" onClick={() => scrollFeed(-1)}>
-          <ChevronUp aria-hidden="true" />
-        </Button>
-        <Button variant="outline" size="icon" className="rounded-full bg-card/80 backdrop-blur" aria-label="Scroll down" title="Next video (↓ or J)" onClick={() => scrollFeed(1)}>
-          <ChevronDown aria-hidden="true" />
-        </Button>
-      </nav>
+      <div className="flex min-h-0 flex-1">
+        <FeedSidebar
+          user={user}
+          topicNames={pickedTopicNames}
+          onGoHome={scrollToTop}
+          onEditInterests={onEditInterests}
+          onShowLikedVideos={navigation.onShowLikedVideos}
+          onShowHistory={navigation.onShowHistory}
+          onShowLeaderboard={navigation.onShowLeaderboard}
+          onShowAdmin={navigation.onShowAdmin}
+          onLogin={onLogout}
+        />
 
-      <div ref={listRef} id="feed-list" className="feed-list flex-1 overflow-y-auto">
-        {feedbackError && (
-          <div className="mx-auto max-w-3xl px-4 pt-4 sm:px-6">
-            <Alert variant="destructive" role="alert">
-              <CircleAlert aria-hidden="true" />
-              {feedbackError}
-            </Alert>
-          </div>
-        )}
-        {videos.map((video) => (
-          <VideoCard
-            key={video.youtubeId}
-            video={video}
-            canSave={user !== null}
-            saved={savedIds.has(video.youtubeId)}
-            onToggleSaved={toggleSaved}
-            feedback={feedbackByVideo[video.youtubeId] ?? null}
-            onFeedbackChange={changeVideoFeedback}
-            highlighted={video.youtubeId === openedVideoId}
-            onPlay={recordPlay}
-            playlists={playlists ?? undefined}
-            onTogglePlaylist={togglePlaylistSaved}
-            onCreatePlaylist={createPlaylistAndSave}
-          />
-        ))}
-
-        {isEmpty && (
-          <FeedMessage icon={<Inbox />}>
-            <p className="font-medium">No videos for these topics yet.</p>
-            <p className="text-sm text-muted-foreground">New videos are fetched from YouTube regularly. Try more topics, or check back later.</p>
-          </FeedMessage>
-        )}
-        {error && (
-          <FeedMessage icon={<CircleAlert className="text-destructive" />}>
-            <p className="font-medium text-destructive" role="alert">
-              {error}
-            </p>
-            <Button variant="outline" className="mt-2" onClick={() => nextPage !== null && loadPage(nextPage)}>
-              Try again
+        <main className="relative min-w-0 flex-1">
+          <nav
+            // Hidden on phones, where people swipe instead and the buttons would cover the video.
+            className="feed-scroll-controls absolute top-1/2 right-4 z-10 hidden -translate-y-1/2 flex-col gap-2 sm:flex"
+            aria-label="Feed navigation"
+          >
+            <Button variant="outline" size="icon" className="rounded-full bg-card/80 shadow-md backdrop-blur" aria-label="Scroll up" title="Previous video (↑ or K)" onClick={() => scrollFeed(-1)}>
+              <ChevronUp aria-hidden="true" />
             </Button>
-          </FeedMessage>
-        )}
-        {finding && (
-          <FeedMessage icon={<Loader2 className="animate-spin text-primary" />} role="status">
-            <p className="font-medium">Finding videos for these topics…</p>
-            <p className="text-sm text-muted-foreground">This usually takes a few seconds.</p>
-          </FeedMessage>
-        )}
-        {loading && !finding && (
-          <p className="feed-message flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-            Loading…
-          </p>
-        )}
+            <Button variant="outline" size="icon" className="rounded-full bg-card/80 shadow-md backdrop-blur" aria-label="Scroll down" title="Next video (↓ or J)" onClick={() => scrollFeed(1)}>
+              <ChevronDown aria-hidden="true" />
+            </Button>
+          </nav>
 
-        <div ref={sentinelRef} className="feed-sentinel h-px" />
+          <div ref={listRef} id="feed-list" className="feed-list h-full overflow-y-auto" onScroll={handleFeedScroll}>
+            {feedbackError && (
+              <div className="mx-auto max-w-3xl px-4 pt-4 sm:px-6">
+                <Alert variant="destructive" role="alert">
+                  <CircleAlert aria-hidden="true" />
+                  {feedbackError}
+                </Alert>
+              </div>
+            )}
+            {videos.map((video) => (
+              <VideoCard
+                key={video.youtubeId}
+                video={video}
+                topicName={video.topicId !== undefined ? topicName.get(video.topicId) : undefined}
+                canSave={user !== null}
+                saved={savedIds.has(video.youtubeId)}
+                onToggleSaved={toggleSaved}
+                feedback={feedbackByVideo[video.youtubeId] ?? null}
+                onFeedbackChange={changeVideoFeedback}
+                highlighted={video.youtubeId === openedVideoId}
+                onPlay={recordPlay}
+                playlists={playlists ?? undefined}
+                onTogglePlaylist={togglePlaylistSaved}
+                onCreatePlaylist={createPlaylistAndSave}
+              />
+            ))}
+
+            {isEmpty && (
+              <FeedMessage icon={<Inbox />}>
+                <p className="font-medium">No videos for these topics yet.</p>
+                <p className="text-sm text-muted-foreground">New videos are fetched from YouTube regularly. Try more topics, or check back later.</p>
+              </FeedMessage>
+            )}
+            {error && (
+              <FeedMessage icon={<CircleAlert className="text-destructive" />}>
+                <p className="font-medium text-destructive" role="alert">
+                  {error}
+                </p>
+                <Button variant="outline" className="mt-2" onClick={() => nextPage !== null && loadPage(nextPage)}>
+                  Try again
+                </Button>
+              </FeedMessage>
+            )}
+            {finding && (
+              <FeedMessage icon={<Loader2 className="animate-spin text-primary" />} role="status">
+                <p className="font-medium">Finding videos for these topics…</p>
+                <p className="text-sm text-muted-foreground">This usually takes a few seconds.</p>
+              </FeedMessage>
+            )}
+            {loading && !finding && (
+              <p className="feed-message flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                Loading…
+              </p>
+            )}
+
+            <div ref={sentinelRef} className="feed-sentinel h-px" />
+          </div>
+        </main>
+
+        <UpNext videos={videos} currentIndex={currentIndex} loading={loading || finding} onSelect={scrollToVideo} />
       </div>
     </div>
   );

@@ -49,10 +49,22 @@ vi.mock('../api/playlists', () => ({
 }));
 
 vi.mock('../api/feed', () => ({
+  fetchTopics: vi.fn().mockResolvedValue([
+    { id: 1, name: 'Math', parentId: null },
+    { id: 2, name: 'Biology', parentId: null },
+  ]),
   fetchFeed: vi.fn(),
   fetchMyVideoFeedback: vi.fn(),
   saveMyVideoFeedback: vi.fn(),
 }));
+
+// The Up next column repeats the feed's titles; it has its own tests in UpNext.test.tsx.
+vi.mock('../components/UpNext', () => ({ default: () => null }));
+
+// The sidebar has the same buttons as the Profile menu, so pick the menu's copy.
+function menuItem(name: string) {
+  return within(screen.getByRole('banner')).getByRole('button', { name });
+}
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 
@@ -172,7 +184,18 @@ describe('FeedPage', () => {
     expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
   });
 
-  it('shows the brain logo in the bottom-right corner', () => {
+  it('names the picked topics in the sidebar and tags each video with its topic', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    renderFeed().scrollToBottom();
+    await screen.findByText('Test video 1');
+
+    const sidebar = screen.getByRole('complementary', { name: 'Sidebar' });
+    expect(await within(sidebar).findByText('Math')).toBeTruthy();
+    expect(within(sidebar).getByText('Biology')).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Video summary' })).getByText('Math')).toBeTruthy();
+  });
+
+  it('shows the brain logo in the sidebar', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
     expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('feed-logo')).toBe(true);
@@ -223,7 +246,7 @@ describe('FeedPage', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(menuItem('Leaderboard'));
     // the feed list isn't on screen anymore, so a key press must not throw or scroll anything
     expect(() => fireEvent.keyDown(document.body, { key: 'ArrowDown' })).not.toThrow();
   });
@@ -259,7 +282,7 @@ describe('FeedPage', () => {
     renderFeed();
     fireEvent.click(screen.getByText('Profile'));
     expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
     expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
     expect(await within(screen.getByRole('region', { name: 'Study notebook' })).findByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
   });
@@ -272,7 +295,7 @@ describe('FeedPage', () => {
     await act(async () => { scrollToBottom(); });
     expect(await screen.findByRole('button', { name: 'Saved. Change save locations' })).toBeTruthy();
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
     const notebook = screen.getByRole('region', { name: 'Study notebook' });
     const remove = await within(notebook).findByRole<HTMLButtonElement>('button', { name: 'Remove Test video 1 from Study notebook' });
     await waitFor(() => expect(remove.disabled).toBe(false));
@@ -344,7 +367,7 @@ describe('FeedPage', () => {
     await screen.findByText('Test video 1');
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(menuItem('Leaderboard'));
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
 
     // the bottom marker is a new element now, and it still has to trigger the next page
@@ -466,13 +489,13 @@ describe('FeedPage', () => {
     renderFeed();
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(menuItem('Leaderboard'));
 
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Leaderboard information' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Update leaderboard' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
-    expect(screen.getByRole('button', { name: 'Interests' })).toBeTruthy();
+    expect(menuItem('Interests')).toBeTruthy();
   });
 
   it('lets an admin open the admin page and come back', async () => {
@@ -480,7 +503,7 @@ describe('FeedPage', () => {
     renderFeed({ ...testUser, admin: true });
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Admin' }));
+    fireEvent.click(menuItem('Admin'));
 
     expect(screen.getByRole('heading', { name: 'Admin' })).toBeTruthy();
     expect(await screen.findByText('No banned videos.')).toBeTruthy();
@@ -499,7 +522,7 @@ describe('FeedPage', () => {
 
   async function openFromYourVideos(title: string) {
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
     fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
     fireEvent.click(await screen.findByRole('button', { name: title }));
   }
@@ -562,7 +585,7 @@ describe('FeedPage', () => {
     scrollToBottom();
     await screen.findByText('Test video 1');
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
     fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
     const title = await screen.findByRole('button', { name: 'Test video 1' });
 
@@ -590,7 +613,7 @@ describe('FeedPage', () => {
     expect(scrolledTo).toHaveLength(1);
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(menuItem('Leaderboard'));
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(scrolledTo).toHaveLength(1);
   });
@@ -609,7 +632,7 @@ describe('FeedPage', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Leaderboard' }));
+    fireEvent.click(menuItem('Leaderboard'));
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'BrainFeed, go to your feed' }));
@@ -626,7 +649,7 @@ describe('FeedPage', () => {
     renderFeed();
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
 
     expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
@@ -648,7 +671,7 @@ describe('FeedPage', () => {
     renderFeed(null);
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
 
     expect(screen.getByText('Sign in to see your saved videos.')).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: /^Liked/ }));
@@ -704,7 +727,7 @@ describe('FeedPage', () => {
     renderFeed();
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Your videos' }));
+    fireEvent.click(menuItem('Your videos'));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Server error');
   });
@@ -727,7 +750,7 @@ describe('FeedPage', () => {
   it('interests button goes to the interest picker', () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
-    fireEvent.click(screen.getByRole('button', { name: 'Interests' }));
+    fireEvent.click(menuItem('Interests'));
     expect(onEditInterests).toHaveBeenCalled();
   });
 
@@ -781,7 +804,7 @@ describe('FeedPage', () => {
     await screen.findByText('Test video 1');
 
     fireEvent.click(screen.getByText('Profile'));
-    fireEvent.click(screen.getByRole('button', { name: 'Watch history' }));
+    fireEvent.click(menuItem('Watch history'));
     expect(screen.getByRole('heading', { name: 'Watch history' })).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'Watched earlier' }));
 
