@@ -105,7 +105,7 @@ public class AuthController {
             throw ApiException.badRequest(passwordProblem.get());
         }
 
-        User user = users.create(email, username, hasher.hash(password));
+        User user = users.create(email, username, hasher.hash(password), ctx.ip());
         SecurityLog.success("register", ctx, user.id());
         startSession(ctx, user);
         ctx.status(201).json(Map.of("user", user));
@@ -149,6 +149,13 @@ public class AuthController {
             throw ApiException.unauthorized(BAD_CREDENTIALS);
         }
 
+        // Checked only after the password is right, so this can't be used to find out which
+        // accounts are banned.
+        if (found.get().banned()) {
+            SecurityLog.failure("login", ctx, found.get().user().id(), "account banned");
+            throw ApiException.forbidden("This account has been suspended.");
+        }
+
         // A correct password clears that account's failures. The IP's count isn't cleared, so an
         // attacker can't reset their limit by logging into their own account between guesses.
         loginFailures.reset(emailKey);
@@ -162,6 +169,7 @@ public class AuthController {
         }
 
         User user = found.get().user();
+        users.recordLogin(user.id(), ctx.ip());
         SecurityLog.success("login", ctx, user.id());
         startSession(ctx, user);
         ctx.json(Map.of("user", user));

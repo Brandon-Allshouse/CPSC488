@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Video } from '../api/feed';
+import { Play, ThumbsDown, ThumbsUp } from 'lucide-react';
+import type { FeedVideo, VideoFeedback } from '../api/feed';
+import { cn } from '@/lib/utils';
+import type { Playlist } from '../api/playlists';
+import SaveMenu from './SaveMenu';
+import { Button } from '@/components/ui/button';
 
 // youtube-nocookie.com is YouTube's "privacy mode" player, which doesn't set tracking cookies
 // until you hit play. If you change either domain, update the CSP in vite.config.ts too.
@@ -7,24 +12,79 @@ const EMBED_URL = 'https://www.youtube-nocookie.com/embed/';
 const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 
 interface Props {
-  video: Video;
+  video: FeedVideo;
   saved?: boolean;
   canSave?: boolean;
-  onToggleSaved?: (video: Video) => void;
+  /** The original private saved-video list, separate from playlists. */
+  onToggleSaved?: (video: FeedVideo) => void | Promise<void>;
+  feedback?: VideoFeedback | null;
+  onFeedbackChange?: (youtubeId: string, feedback: VideoFeedback | null) => Promise<void>;
+  /** Outlines the card, to show which video was just opened from "Your videos". */
+  highlighted?: boolean;
+  /** Called when the play button is pressed (for the watch history). Scrolling past doesn't count. */
+  onPlay?: (youtubeId: string) => void;
+  playlists?: Playlist[];
+  onTogglePlaylist?: (youtubeId: string, playlistID: number, save:boolean) => Promise<void>;
+  onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
+}
+
+/** The card's element id, so the feed can scroll to a video. YouTube ids are URL-safe already. */
+export function videoCardId(youtubeId: string) {
+  return `video-${encodeURIComponent(youtubeId)}`;
+}
+
+function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: {
+  kind: VideoFeedback;
+  label: string;
+  tooltipId: string;
+  pressed: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const Icon = kind === 'liked' ? ThumbsUp : ThumbsDown;
+  return (
+    <button
+      type="button"
+      className={cn(
+        'group/feedback relative flex size-10 cursor-pointer items-center justify-center rounded-full border bg-card transition-colors duration-150 hover:bg-accent disabled:cursor-wait disabled:opacity-60',
+        pressed && kind === 'liked' && 'border-primary/60 bg-primary/15 text-primary hover:bg-primary/20',
+        pressed && kind === 'disliked' && 'border-destructive/60 bg-destructive/15 text-destructive hover:bg-destructive/20',
+      )}
+      aria-label={label}
+      aria-describedby={tooltipId}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon aria-hidden="true" className={cn('size-[18px]', pressed && 'animate-pop fill-current')} />
+      <span
+        id={tooltipId}
+        role="tooltip"
+        className="pointer-events-none absolute right-0 bottom-full mb-2 w-max max-w-48 translate-y-1 rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-lg transition-all duration-150 group-hover/feedback:translate-y-0 group-hover/feedback:opacity-100 group-focus-visible/feedback:translate-y-0 group-focus-visible/feedback:opacity-100"
+      >
+        {label}
+      </span>
+    </button>
+  );
 }
 
 // One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
 // videos doesn't load a YouTube player (and its trackers) for every one of them.
-export default function VideoCard({ 
+export default function VideoCard({
   video,
   saved = false,
   canSave = false,
   onToggleSaved,
+  feedback = null,
+  onFeedbackChange,
+  highlighted = false,
+  onPlay,
+  playlists,
+  onTogglePlaylist,
+  onCreatePlaylist,
 }: Props) {
   const [playing, setPlaying] = useState(false);
-  // Thumbs up/down only lives on screen for now. It isn't sent to the backend, so it resets on
-  // reload. Pressing the same button again clears it.
-  const [feedback, setFeedback] = useState<'liked' | 'disliked' | null>(null);
+  const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
 
   // Stop the video once it's mostly scrolled out of view, so it doesn't keep playing off-screen.
@@ -44,11 +104,32 @@ export default function VideoCard({
   // The backend only stores ids matching YouTube's format; encoding is a second safeguard.
   const id = encodeURIComponent(video.youtubeId);
 
+  async function changeFeedback(next: VideoFeedback | null) {
+    if (!onFeedbackChange) return;
+    setSavingFeedback(true);
+    try {
+      await onFeedbackChange(video.youtubeId, next);
+    } finally {
+      setSavingFeedback(false);
+    }
+  }
+
   return (
-    <article ref={cardRef} className="video-card">
-      <div className="video-frame">
+    <article
+      ref={cardRef}
+      id={videoCardId(video.youtubeId)}
+      data-highlighted={highlighted || undefined}
+      className="video-card mx-auto flex h-full w-full max-w-3xl shrink-0 flex-col justify-center gap-4 px-4 py-4 sm:px-6"
+    >
+      <div
+        className={cn(
+          'video-frame relative aspect-video w-full overflow-hidden rounded-xl border bg-black shadow-2xl ring-offset-4 ring-offset-background transition-shadow duration-500',
+          highlighted && 'ring-2 ring-primary',
+        )}
+      >
         {playing ? (
           <iframe
+            className="absolute inset-0 size-full"
             src={`${EMBED_URL}${id}?autoplay=1&rel=0`}
             title={video.title}
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
@@ -61,75 +142,86 @@ export default function VideoCard({
         ) : (
           <button
             type="button"
-            className="video-poster"
-            onClick={() => setPlaying(true)}
+            className="video-poster group/poster absolute inset-0 cursor-pointer"
+            onClick={() => {
+              setPlaying(true);
+              onPlay?.(video.youtubeId);
+            }}
             aria-label={`Play: ${video.title}`}
           >
-            <img src={`${THUMBNAIL_URL}${id}/hqdefault.jpg`} alt="" loading="lazy" />
-            <span className="play-icon" aria-hidden="true">
-              ▶
+            <img
+              src={`${THUMBNAIL_URL}${id}/hqdefault.jpg`}
+              alt=""
+              loading="lazy"
+              className="size-full object-cover transition-transform duration-300 group-hover/poster:scale-[1.03]"
+            />
+            <span className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" aria-hidden="true" />
+            <span
+              className="play-icon absolute top-1/2 left-1/2 flex size-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-xl ring-4 ring-white/15 transition-transform duration-200 group-hover/poster:scale-110"
+              aria-hidden="true"
+            >
+              <Play className="ml-1 size-7 fill-current" />
             </span>
           </button>
         )}
       </div>
-      {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-     
-      <section className="video-summary" aria-label="Video summary">
+
+      <section className="video-summary flex flex-col gap-2 rounded-xl border bg-card p-4" aria-label="Video summary">
         {/* These come from YouTube. Normal JSX text is safe; never use dangerouslySetInnerHTML here. */}
-        <div className="video-title-row">
-          <h2 className="video-title">{video.title}</h2>
-          <div className="video-feedback">
-            <button
-              type="button"
-              className="video-feedback-button video-feedback-like"
-              aria-label="I liked this video"
-              aria-describedby={`like-tooltip-${id}`}
-              aria-pressed={feedback === 'liked'}
-              onClick={() => setFeedback((current) => (current === 'liked' ? null : 'liked'))}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M1 21h4V9H1v12zM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-              </svg>
-              <span id={`like-tooltip-${id}`} className="video-feedback-tooltip" role="tooltip">
-                I liked this video
-              </span>
-            </button>
-            <button
-              type="button"
-              className="video-feedback-button video-feedback-dislike"
-              aria-label="I didn't really like this video"
-              aria-describedby={`dislike-tooltip-${id}`}
-              aria-pressed={feedback === 'disliked'}
-              onClick={() => setFeedback((current) => (current === 'disliked' ? null : 'disliked'))}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M1 21h4V9H1v12zM23 10c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
-              </svg>
-              <span id={`dislike-tooltip-${id}`} className="video-feedback-tooltip" role="tooltip">
-                I didn't really like this video
-              </span>
-            </button>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="video-title line-clamp-2 text-base sm:text-lg">{video.title}</h2>
+          <div className="video-feedback flex shrink-0 gap-2">
+            {onFeedbackChange && (
+              <>
+                <FeedbackButton
+                  kind="liked"
+                  label="I liked this video"
+                  tooltipId={`like-tooltip-${id}`}
+                  pressed={feedback === 'liked'}
+                  disabled={savingFeedback}
+                  onClick={() => void changeFeedback(feedback === 'liked' ? null : 'liked')}
+                />
+                <FeedbackButton
+                  kind="disliked"
+                  label="I didn't really like this video"
+                  tooltipId={`dislike-tooltip-${id}`}
+                  pressed={feedback === 'disliked'}
+                  disabled={savingFeedback}
+                  onClick={() => void changeFeedback(feedback === 'disliked' ? null : 'disliked')}
+                />
+              </>
+            )}
+            {playlists && onTogglePlaylist && onCreatePlaylist && (
+              <SaveMenu
+                youtubeId={video.youtubeId}
+                idPrefix={`video-${id}`}
+                playlists={playlists}
+                onToggle={(playlistId, save) => onTogglePlaylist(video.youtubeId, playlistId, save)}
+                onCreate={(name) => onCreatePlaylist(video.youtubeId, name)}
+              />
+            )}
           </div>
         </div>
-        <p className="muted">{video.channelTitle}</p>
+        <p className="text-sm text-muted-foreground">{video.channelTitle}</p>
         {/* Placeholder heading. The summary text will come from the LLM summaries on the roadmap. */}
-        <p className="video-summary-label">
+        <p className="video-summary-label mt-1 border-t pt-3 text-sm">
           <strong>Video Summary</strong>
         </p>
       </section>
         
-         {canSave && onToggleSaved && (
-      <div className="video-action">
-      <button
-        type="button"
-        className="btn btn-secondary save-button"
-        onClick={() => onToggleSaved(video)}
-        aria-pressed={saved}
-      >
-        {saved ? 'Saved' : 'Save'}
-      </button>
-      </div>
-        )}
+      {canSave && onToggleSaved && (
+        <div className="video-action self-end">
+          <Button
+            type="button"
+            variant="secondary"
+            className="save-button"
+            onClick={() => void onToggleSaved(video)}
+            aria-pressed={saved}
+          >
+            {saved ? 'Saved' : 'Save'}
+          </Button>
+        </div>
+      )}
     </article>
   );
 }

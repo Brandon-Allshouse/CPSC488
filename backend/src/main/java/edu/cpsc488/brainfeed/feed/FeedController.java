@@ -24,8 +24,9 @@ import java.util.stream.Collectors;
  * database. The only way the feed reaches YouTube is asking FeedRefresher to fetch topics that have
  * never been searched, and that has a daily budget, so nobody can burn through our quota.
  *
- * <p>/api/me/interests needs a login and only touches the logged-in user's own interests. The
- * user comes from the session cookie, so there's no user id in the request to tamper with.
+ * <p>/api/me/interests and /api/me/video-feedback need a login and only touch the logged-in user's
+ * own rows. The user comes from the session cookie, so there's no user id in the request to tamper
+ * with.
  */
 public class FeedController {
 
@@ -36,6 +37,9 @@ public class FeedController {
     static final int MAX_TOPICS_PER_REQUEST = 200;
 
     record InterestsRequest(List<Integer> topicIds) {
+    }
+
+    record FeedbackRequest(String feedback) {
     }
 
     /**
@@ -72,6 +76,9 @@ public class FeedController {
         routes.get("/api/topics", this::handleTopics);
         routes.get("/api/me/interests", this::handleGetInterests);
         routes.put("/api/me/interests", this::handlePutInterests);
+        routes.get("/api/me/video-feedback", this::handleGetFeedback);
+        routes.put("/api/me/video-feedback/{youtubeId}", this::handlePutFeedback);
+        routes.delete("/api/me/video-feedback/{youtubeId}", this::handleDeleteFeedback);
         routes.get("/api/feed", this::handleFeed);
     }
 
@@ -90,6 +97,31 @@ public class FeedController {
         Set<Integer> picked = checkTopicIds(req.topicIds(), validTopicIds());
         topics.replaceInterests(user.id(), picked);
         ctx.json(Map.of("topicIds", List.copyOf(picked)));
+    }
+
+    private void handleGetFeedback(Context ctx) {
+        User user = requireUser(ctx);
+        ctx.json(Map.of(
+                "likedVideos", videos.findFeedback(user.id(), "liked"),
+                "dislikedVideos", videos.findFeedback(user.id(), "disliked")));
+    }
+
+    private void handlePutFeedback(Context ctx) {
+        User user = requireUser(ctx);
+        String youtubeId = checkYoutubeId(ctx.pathParam("youtubeId"));
+        FeedbackRequest request = RequestBodies.parse(ctx, FeedbackRequest.class);
+        String feedback = checkFeedback(request.feedback());
+        if (!videos.saveFeedback(user.id(), youtubeId, feedback)) {
+            throw ApiException.badRequest("Video not found.");
+        }
+        ctx.status(204);
+    }
+
+    private void handleDeleteFeedback(Context ctx) {
+        User user = requireUser(ctx);
+        String youtubeId = checkYoutubeId(ctx.pathParam("youtubeId"));
+        videos.saveFeedback(user.id(), youtubeId, null);
+        ctx.status(204);
     }
 
     /** GET /api/feed?topics=1,2,3&seed=123&page=0 */
@@ -157,6 +189,20 @@ public class FeedController {
 
     private User requireUser(Context ctx) {
         return auth.currentUser(ctx).orElseThrow(() -> ApiException.unauthorized("Not logged in."));
+    }
+
+    public static String checkYoutubeId(String youtubeId) {
+        if (youtubeId == null || !YouTubeClient.VIDEO_ID.matcher(youtubeId).matches()) {
+            throw ApiException.badRequest("Invalid video id.");
+        }
+        return youtubeId;
+    }
+
+    static String checkFeedback(String feedback) {
+        if (!"liked".equals(feedback) && !"disliked".equals(feedback)) {
+            throw ApiException.badRequest("Feedback must be liked or disliked.");
+        }
+        return feedback;
     }
 
     private static String orDefault(String value, String fallback) {

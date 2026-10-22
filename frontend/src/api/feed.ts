@@ -21,12 +21,31 @@ export interface Video {
   publishedAt: string;
 }
 
+/**
+ * The parts of a video the feed shows. A liked video opened from "Your videos" only has these,
+ * since it may not be in the feed pages loaded so far.
+ */
+export type FeedVideo = Pick<Video, 'youtubeId' | 'title' | 'channelTitle'>;
+
 export interface FeedPage {
   videos: Video[];
   /** null when there are no more videos. */
   nextPage: number | null;
   /** True while videos for newly picked topics are still being found on YouTube. Check again soon. */
   fetching: boolean;
+}
+
+export type VideoFeedback = 'liked' | 'disliked';
+
+export interface SavedVideo {
+  youtubeId: string;
+  title: string;
+  creator: string;
+}
+
+export interface MyVideoFeedback {
+  likedVideos: SavedVideo[];
+  dislikedVideos: SavedVideo[];
 }
 
 export async function fetchTopics(): Promise<Topic[]> {
@@ -55,4 +74,22 @@ export async function saveMyInterests(topicIds: number[]): Promise<number[]> {
 export async function fetchFeed(topicIds: number[], seed: number, page: number): Promise<FeedPage> {
   const params = new URLSearchParams({ topics: topicIds.join(','), seed: String(seed), page: String(page) });
   return request<FeedPage>(`/api/feed?${params}`);
+}
+
+/** The signed-in user's private liked and disliked videos. */
+export async function fetchMyVideoFeedback(): Promise<MyVideoFeedback> {
+  return request<MyVideoFeedback>('/api/me/video-feedback');
+}
+
+/** Saves a vote, or clears it when feedback is null. */
+export async function saveMyVideoFeedback(youtubeId: string, feedback: VideoFeedback | null): Promise<void> {
+  const path = `/api/me/video-feedback/${encodeURIComponent(youtubeId)}`;
+  if (feedback === null) {
+    await request<void>(path, { method: 'DELETE' });
+  } else {
+    await request<void>(path, {
+      method: 'PUT',
+      body: JSON.stringify({ feedback }),
+    });
+  }
 }

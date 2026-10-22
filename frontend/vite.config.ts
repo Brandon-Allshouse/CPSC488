@@ -1,5 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // Content-Security-Policy for the built site: the browser will only run scripts and styles that
 // come from our own origin, so injected <script> tags or inline event handlers can't execute.
@@ -40,7 +42,13 @@ const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:7070';
 const usePolling = process.env.VITE_USE_POLLING === 'true';
 
 export default defineConfig({
-  plugins: [react(), contentSecurityPolicy()],
+  // Tailwind compiles to a normal CSS file at build time, so it works with the strict style-src above.
+  plugins: [react(), tailwindcss(), contentSecurityPolicy()],
+  // "@/components/ui/button" instead of "../../components/ui/button". This is the shadcn/ui
+  // convention, so components copied from its docs work without changing their imports.
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   server: {
     port: 5173,
     // Fail instead of silently switching to another port, because the backend's ALLOWED_ORIGINS
@@ -48,7 +56,9 @@ export default defineConfig({
     strictPort: true,
     watch: usePolling ? { usePolling: true, interval: 300 } : undefined,
     proxy: {
-      '/api': apiProxyTarget,
+      // xfwd adds X-Forwarded-For, so the backend can see the real client's IP. The backend only
+      // believes it from addresses in TRUSTED_PROXIES (see ClientIp.java).
+      '/api': { target: apiProxyTarget, xfwd: true },
     },
   },
 });

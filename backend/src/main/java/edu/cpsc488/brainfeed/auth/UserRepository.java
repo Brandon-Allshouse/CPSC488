@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed.auth;
 
 import edu.cpsc488.brainfeed.ApiException;
+import edu.cpsc488.brainfeed.ClientIp;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -23,7 +24,7 @@ public class UserRepository {
      * A user plus their password hash. It's package-private, so only auth code can see password
      * hashes. Everything outside this package, including API responses, gets a plain {@link User}.
      */
-    record Credentials(User user, String passwordHash) {
+    record Credentials(User user, String passwordHash, boolean banned) {
     }
 
     private final DataSource dataSource;
@@ -32,8 +33,12 @@ public class UserRepository {
         this.dataSource = dataSource;
     }
 
+    /**
+     * Banned users are treated as missing, so a session that somehow outlived the ban still can't
+     * be used. Re-read on every request, so taking admin away or banning works right away.
+     */
     public Optional<User> findById(long id) {
-        return findCredentials("SELECT * FROM users WHERE id = ?", ps -> ps.setLong(1, id))
+        return findCredentials("SELECT * FROM users WHERE id = ? AND banned_at IS NULL", ps -> ps.setLong(1, id))
                 .map(Credentials::user);
     }
 
@@ -48,17 +53,21 @@ public class UserRepository {
      *
      * @throws ApiException 409 if the email or username is already taken
      */
-    User create(String email, String username, String passwordHash) {
+    User create(String email, String username, String passwordHash, String ip) {
+        // Signing up logs the new user in, so it also counts as their last login.
         String sql = """
-                INSERT INTO users (email, username, password_hash)
-                VALUES (?, ?, ?)
+                INSERT INTO users (email, username, password_hash, signup_ip, last_login_ip, last_login_at)
+                VALUES (?, ?, ?, CAST(? AS inet), CAST(? AS inet), now())
                 RETURNING *
                 """;
+        String storedIp = ClientIp.normalize(ip);
         try (Connection conn = dataSource.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, email);
             ps.setString(2, username);
             ps.setString(3, passwordHash);
+            ps.setString(4, storedIp);
+            ps.setString(5, storedIp);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return mapUser(rs);
@@ -77,6 +86,19 @@ public class UserRepository {
         }
     }
 
+    /** Remembers where and when a user last logged in, for the admin page. */
+    void recordLogin(long userId, String ip) {
+        String sql = "UPDATE users SET last_login_ip = CAST(? AS inet), last_login_at = now() WHERE id = ?";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, ClientIp.normalize(ip));
+            ps.setLong(2, userId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     /** Fills in a statement's {@code ?} placeholders. Like a lambda, but allowed to throw SQLException. */
     private interface Binder {
         void bind(PreparedStatement ps) throws SQLException;
@@ -90,7 +112,8 @@ public class UserRepository {
                 if (!rs.next()) {
                     return Optional.empty();
                 }
-                return Optional.of(new Credentials(mapUser(rs), rs.getString("password_hash")));
+                return Optional.of(new Credentials(mapUser(rs), rs.getString("password_hash"),
+                        rs.getObject("banned_at") != null));
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -102,6 +125,7 @@ public class UserRepository {
                 rs.getLong("id"),
                 rs.getString("email"),
                 rs.getString("username"),
-                rs.getObject("created_at", OffsetDateTime.class));
+                rs.getObject("created_at", OffsetDateTime.class),
+                rs.getBoolean("is_admin"));
     }
 }

@@ -8,6 +8,9 @@ export interface User {
   email: string;
   username: string;
   createdAt: string;
+  // Only decides whether the Admin menu item shows. The backend checks it again on every admin
+  // request, so changing it in the browser doesn't give anyone admin access.
+  admin: boolean;
 }
 
 export async function login(email: string, password: string): Promise<User> {

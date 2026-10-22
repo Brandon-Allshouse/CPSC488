@@ -19,17 +19,21 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 ## Features
 
 - Sign up for an account, or just browse as a guest
-- Pick interests up front, change them whenever: a whole subject (Math) or just part of it (Algebra 2)
+- Pick interests up front, change them whenever: a whole subject (Math), just part of it (Algebra 2),
+  or every subject at once with "Select all subjects"
 - Scrollable feed of educational videos
-- Thumbs up / down on videos to improve what you're shown
+- Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
+  videos where clicking a title takes you back to that video in your feed
 - Less content from creators/channels you've marked as not interesting
-- Preferences and history saved for registered users
+- Preferences and history saved for registered users: a private watch history of the last 25 videos
+  you pressed play on
 - A random/discovery feed to branch out into new topics
+- Admin page: ban users, blacklist videos, and see a log of every admin action
 
 ## Stack (subject to change)
 
 - **Backend:** Java 25, using Javalin 7, built with Maven, tested with JUnit
-- **Frontend:** React 19 + TypeScript, built with Vite (Node 24), tested with Vitest
+- **Frontend:** React 19 + TypeScript, built with Vite (Node 24), styled with Tailwind CSS 4 and shadcn/ui components, tested with Vitest
 - **Database:** PostgreSQL 18. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
 - **Local development:** Docker Compose runs all of the above, so the only tools you need are Docker Desktop and Git
 - **External services:** YouTube Data API, plus an LLM API for content classification (and later, generation)
@@ -39,7 +43,9 @@ Browser ──▶ React frontend (localhost:5173) ──/api──▶ Javalin ba
 ```
 
 The frontend never talks to the database. Postgres only accepts connections from your own machine, and
-only the backend has its password.
+only the backend has its password. Docker enforces this too: the database and backend share one
+network (`data`) and the backend and frontend share another (`web`), so the frontend container
+can't even reach the database. Keep new frontend code going through `/api`.
 
 ## Project layout
 
@@ -48,11 +54,17 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/java/.../App.java    entry point: settings, security headers, routes
   src/main/java/.../auth/       accounts, login sessions, password hashing
   src/main/java/.../feed/       topics, interests, video feed, YouTube client
+  src/main/java/.../admin/      admin page endpoints: user bans, video blacklist, admin action log
+  src/main/java/.../history/    watch history: the last 25 videos each user pressed play on
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage
-  src/components/               VideoCard (one video in the feed, with thumbs up/down and summary box)
+  src/pages/                    LoginPage, InterestsPage, FeedPage, LikedVideosPage, WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
+  src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
+  src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
+  src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
+                                LanguageSelect (language picker on the interests page; UI only for now)
+  src/index.css                 color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
   src/api/                      typed calls to the backend
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
@@ -222,6 +234,8 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Docker Desktop: "Virtualization support not detected" | Virtualization is turned off in your laptop's BIOS/UEFI settings. Search your laptop model + "enable virtualization". |
 | `env file ...\.env not found` or `Set DB_PASSWORD in .env` | `.env` is missing or misnamed. It must be in the `CPSC488` folder and named exactly `.env`. Check with `Get-ChildItem -Force .env`; Notepad sometimes saves it as `.env.txt`. |
 | Node reports `Unknown file extension ".tsx"` when you run a frontend test | Don't launch the test file with `node`. Run it through Vitest instead: `docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx` (the app must be running). |
+| `Cross-site request blocked.` when logging in or signing up | The address in your browser isn't in `ALLOWED_ORIGINS` (in `.env`). Open exactly **http://localhost:5173**; `127.0.0.1:5173` counts as a different site. To see what was blocked, run `docker compose logs backend` and look for `event=cross_site_write`. If you really need another address, add it to `ALLOWED_ORIGINS` (comma-separated) and run `docker compose up -d backend`. |
+| pgAdmin: `failed to resolve host 'db'` (or the backend can't reach `db`) after pulling | Your containers are still on the old shared network from before the database got its own. Run `docker compose up -d` (and `docker compose --profile tools up -d pgadmin` if you use pgAdmin) to recreate them on the new networks. Your data and pgAdmin settings are kept. |
 | Backend: `DB_PASSWORD is not set` or `PASSWORD_PEPPER ...` | That value in `.env` is blank or invalid. Generate one as in step 1. |
 | Backend: `password authentication failed for user "..."` | `DB_PASSWORD` changed after the database was created. Reset the local database: `docker compose down -v`, then `docker compose up --build`. This erases local data. |
 | Database starts empty after pulling the PostgreSQL 18 upgrade | Expected: Postgres can't read data files from an older major version, so the database moved to a new volume and starts fresh. Sign up again. To free the old volume's disk space: `docker volume rm brainfeed_brainfeed-data`. |
@@ -231,6 +245,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
 | `Too many failed login attempts` while testing | The limits are kept in memory. Run `docker compose restart backend`. |
 | Sign-up hangs a few seconds with no internet | The breached-password check is timing out. Set `PASSWORD_BREACH_CHECK=false` in `.env` while offline, and restart. |
+| http://localhost:5050 (pgAdmin) won't load | pgAdmin doesn't start with a plain `docker compose up`. Run `docker compose --profile tools up -d pgadmin` and wait about 20 seconds. If it still won't load, `docker compose logs pgadmin` says why (usually `PGADMIN_PASSWORD` is blank in `.env`). |
 
 ### Optional: running without Docker (for IDE debugging)
 
@@ -266,6 +281,79 @@ Common native-setup problems:
 - Maven says `JAVA_HOME` is not defined correctly: run
   `[Environment]::SetEnvironmentVariable('JAVA_HOME', (Split-Path (Split-Path (Get-Command java).Source)), 'User')`,
   then reopen PowerShell.
+
+## Frontend
+
+The UI is built from [shadcn/ui](https://ui.shadcn.com) components styled with
+[Tailwind CSS](https://tailwindcss.com). shadcn/ui isn't a library you install: its components are
+short source files you copy into `src/components/ui/` and own. Colors come from the variables at the
+top of `src/index.css` (`background`, `card`, `primary`, `muted`, `destructive`, ...), so changing a
+color there changes it everywhere. Icons come from [lucide-react](https://lucide.dev).
+
+### Getting around
+
+- **The BrainFeed logo and name** (top left, on every signed-in page) go back to the feed. On the
+  feed itself they scroll back to the first video.
+- **A title on "Your videos" or "Watch history"** (both in the Profile menu) opens that video in the feed. If it's
+  already loaded, the feed scrolls to it; if not, it's added at the top. Either way it's outlined
+  for a few seconds, and scrolling carries on from there. A video is never shown twice.
+- **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
+  Escape or a click outside it.
+
+### Adding a page
+
+Every signed-in page uses the same template, `PageLayout`. It draws the header and Profile menu,
+the title and "Back to feed", so a new page only contains its own content:
+
+```tsx
+import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+export default function QuizPage(navigation: PageNavigation) {
+  return (
+    <PageLayout {...navigation} name="quiz" title="Quiz" description="Test what you just watched.">
+      <Card>
+        <CardHeader>
+          <CardTitle>Question 1</CardTitle>
+        </CardHeader>
+        <CardContent>...</CardContent>
+      </Card>
+    </PageLayout>
+  );
+}
+```
+
+The BrainFeed logo on the new page goes back to the feed automatically. Then, in `FeedPage.tsx`,
+add `'quiz'` to the `view` type, add an `onShowQuiz` entry to
+`navigation`, render `<QuizPage {...navigation} />` when it's selected, and add a menu item in
+`FeedHeader.tsx`. Full-screen steps before the feed (like login) use `AuthLayout` instead.
+
+### Adding a shadcn/ui component
+
+Copy the component's code from ui.shadcn.com (the "Manual" install tab) into
+`src/components/ui/`. Imports like `@/lib/utils` already work. Two rules:
+
+- **Avoid components that pop up or position themselves** (Dropdown Menu, Popover, Tooltip,
+  Select, Dialog) unless you really need one. They use Radix, which positions things with inline
+  styles and is hard to test. Our menus use a styled `<details>` element instead (see
+  `FeedHeader.tsx`).
+- **New npm packages need a check first:** run `npm audit`, and don't install a version released in
+  the last two weeks. Brand-new releases are where supply-chain attacks hide.
+
+### Course requirements checklist
+
+| Requirement | Where |
+|---|---|
+| Classes and ids | Tailwind classes everywhere, plus named classes used as hooks (`feed-list`, `video-card`, `auth-backdrop`, ...). Ids on every page (`login-page`, `feed-page`, `admin-page`, ...), on form fields (`email`, `password`), and on headings that label sections |
+| `display: flex` | Tailwind's `flex` class, used across the app (`FeedHeader.tsx`, `PageLayout.tsx`, `VideoCard.tsx`, ...) |
+| CSS animation or transition | `@keyframes fade-in-up` (pages and cards slide in) and `@keyframes pop` (thumbs up/down) in `index.css`; transitions on buttons, links, the menu chevron, the play button and table rows |
+| 2+ font properties changed | `index.css` base layer: `font-family` (Inter), `font-size`, `line-height`, `letter-spacing`, and `font-weight` on headings |
+| 2+ box model properties changed | `margin` on `body` in `index.css`; `padding`, `border`, `border-radius` and `margin` through Tailwind (`p-4`, `border`, `rounded-xl`, `mt-2`) on every card and button |
+| Unobtrusive JavaScript | `index.html` has no inline scripts or `on...=` attributes. All behavior is attached from TypeScript modules, and the production Content-Security-Policy blocks inline scripts and handlers anyway |
+| 10+ functions | 80+ in `src/` (not counting tests), e.g. `handleSubmit`, `switchMode`, `toggle`, `loadPage`, `scrollFeed`, `changeVideoFeedback`, `runAction`, `parseYoutubeId`, `closeMenu`, `cn` |
+| 20+ event listeners | 40+: `onClick`, `onChange` and `onSubmit` handlers on every page; `keydown` listeners for the feed's ↑/↓/J/K shortcuts and for closing the Profile menu with Escape; a `pointerdown` listener for closing it by clicking outside; and two `IntersectionObserver`s (infinite scroll, pausing off-screen videos) |
+
+TypeScript counts as JavaScript here; it compiles to plain JavaScript.
 
 ## Contributing
 
@@ -344,8 +432,15 @@ Then start your next change from step 1.
 
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
-`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `PORT`,
+`PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `TRUSTED_PROXIES`, `PORT`,
 `YOUTUBE_API_KEY`, `NVD_API_KEY`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
+
+**Users' IP addresses.** Browsers reach the backend through a proxy (Vite in development), so the
+backend learns each user's real IP from the proxy's `X-Forwarded-For` header, and only believes
+that header from the proxies listed in `TRUSTED_PROXIES` (see `ClientIp.java`). Docker Compose
+sets it to the frontend container. In local Docker everyone shows up as the same address, your
+own machine as Docker sees it (something like `172.x.0.1`). In production, set `TRUSTED_PROXIES`
+to the web server in front of the backend, and make sure that server sets `X-Forwarded-For`.
 
 ### Getting a YouTube API key
 
@@ -423,8 +518,9 @@ All request and response bodies are JSON. Errors look like `{ "error": "message 
 | POST   | `/api/auth/logout`   | none                            | `204`, and ends the session                        |
 | GET    | `/api/auth/me`       | none                            | `200 { user }`, or `401` if not logged in          |
 
-`user` is `{ id, email, username, createdAt }`. Other error codes: `400` invalid input, `409` email or
-username taken, `429` too many attempts. Every POST and PUT must send `Content-Type: application/json`
+`user` is `{ id, email, username, createdAt, admin }`. Other error codes: `400` invalid input, `403`
+account banned (login only, and only after the right password), `409` email or username taken, `429`
+too many attempts. Every POST and PUT must send `Content-Type: application/json`
 (the frontend's `request()` helper in `api/client.ts` does this).
 
 ## Feed API
@@ -434,6 +530,9 @@ username taken, `429` too many attempts. Every POST and PUT must send `Content-T
 | GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name, parentId }] }`               |
 | GET    | `/api/me/interests` | none (login required)              | `200 { topicIds }`, empty if none picked yet             |
 | PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
+| GET    | `/api/me/video-feedback` | none (login required)         | `200 { likedVideos, dislikedVideos }`                    |
+| PUT    | `/api/me/video-feedback/{youtubeId}` | `{ feedback: "liked" or "disliked" }` (login required) | `204`; saves the user's choice |
+| DELETE | `/api/me/video-feedback/{youtubeId}` | none (login required)          | `204`; clears the user's choice                          |
 | GET    | `/api/feed`         | `?topics=1,2&seed=123&page=0`      | `200 { videos, nextPage, fetching }`; see below         |
 
 Topics come in two levels. A subject (Math) has `parentId: null`; a sub-subject (Algebra 2) has its
@@ -459,7 +558,59 @@ and that search is happening now, so ask for page 0 again in a few seconds.
 A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
 feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
 scrolling. Videos are served from our database (filled once a day per topic by `FeedRefresher`),
-so browsing never spends YouTube quota.
+so browsing never spends YouTube quota. Video feedback requires a signed-in account and is private
+to that account. The feedback endpoint returns saved videos as `{ youtubeId, title, creator }`;
+guests are asked to log in before voting.
+
+## Watch history API
+
+A video goes into the history when the user presses its play button. Scrolling past it doesn't
+count. Each user keeps their newest 25: watching a video again moves it back to the top, and older
+ones are deleted. The history is private (admins can't see it either), is deleted with the account,
+and loses a video if an admin bans it. All endpoints need a login and answer `401` otherwise.
+
+| Method | Path                                  | Body | Success response                                                         |
+|--------|---------------------------------------|------|--------------------------------------------------------------------------|
+| GET    | `/api/me/watch-history`               | none | `200 { videos: [{ youtubeId, title, creator, watchedAt }], limit: 25 }`, newest first |
+| PUT    | `/api/me/watch-history/{youtubeId}`   | none | `204`; records a play. `404` if the video isn't in our database          |
+| DELETE | `/api/me/watch-history/{youtubeId}`   | none | `204`; removes one video. `404` if it wasn't in the history              |
+| DELETE | `/api/me/watch-history`               | none | `204`; clears the whole history                                          |
+
+## Admin API
+
+Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the user isn't an admin.
+
+| Method | Path                                    | Body / query      | Success response                                                     |
+|--------|-----------------------------------------|-------------------|----------------------------------------------------------------------|
+| GET    | `/api/admin/stats`                      | none              | `200 { users, bannedUsers, admins, videos, bannedVideos }`           |
+| GET    | `/api/admin/users`                      | `?q=text`         | `200 { users }`, up to 50 matching username, email or IP address, newest first |
+| PUT    | `/api/admin/users/{id}/ban`             | `{ reason }`      | `204`; bans and logs them out everywhere. `400` for yourself or an admin |
+| DELETE | `/api/admin/users/{id}/ban`             | none              | `204`; `404` if they weren't banned                                  |
+| GET    | `/api/admin/videos`                     | `?q=text`         | `200 { videos }`, up to 50 matching title, channel or id             |
+| GET    | `/api/admin/banned-videos`              | none              | `200 { videos }`, newest ban first                                   |
+| PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
+| DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
+| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans and unbans, with the admin's IP |
+
+A user in `users` is `{ id, username, email, createdAt, admin, bannedAt, banReason, signupIp,
+lastLoginIp, lastLoginAt }`. The IPs are `null` for accounts from before IPs were recorded, and
+they're never included in any non-admin response. A reason (1-200 characters, one line) is
+required for every ban. Banning a video works for any
+YouTube id, even one the feed hasn't fetched yet.
+
+### Admin accounts
+
+There's no button or endpoint that makes someone an admin, on purpose: that way a bug or a stolen
+session can't be used to hand out admin access. To make an account an admin, sign it up normally,
+then open psql (see "Looking at the database") and run:
+
+```sql
+UPDATE users SET is_admin = true WHERE username = 'testuser';
+```
+
+The change takes effect on that user's next request; reload the page and **Admin** appears in the
+Profile menu. Set it back to `false` the same way to remove access. An admin can't be banned, so
+remove admin access first if you ever need to.
 
 ## Security
 

@@ -29,7 +29,7 @@ function chip(name: string) {
 describe('InterestsPage', () => {
   it('shows the brain logo in the top-left corner', () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
-    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('auth-logo');
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('auth-logo')).toBe(true);
   });
 
   it('lists the topics from the backend', async () => {
@@ -146,4 +146,53 @@ describe('InterestsPage', () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={true} />);
     expect(await screen.findByText(/as a guest they reset/)).toBeTruthy();
   });
+
+  it('selects every subject at once', async () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all subjects' }));
+
+    expect(chip('All of Math').getAttribute('aria-pressed')).toBe('true');
+    expect(chip('All of History').getAttribute('aria-pressed')).toBe('true');
+    expect(chip('All of Biology').getAttribute('aria-pressed')).toBe('true');
+    // sub-subjects are already included in their subject, so they aren't picked separately
+    expect(chip('Algebra 2').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeTruthy();
+  });
+
+  it('saves exactly the subjects after selecting all', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<InterestsPage initial={[4]} onSave={onSave} isGuest={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select all subjects' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
+
+    // Algebra 2 (4) is dropped because Math (1) covers it
+    expect(onSave.mock.calls[0][0].sort()).toEqual([1, 2, 3]);
+  });
+
+  it('clears every pick once everything is selected', async () => {
+    render(<InterestsPage initial={[1, 2, 3, 4]} onSave={vi.fn()} isGuest={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear all' }));
+
+    for (const name of ['All of Math', 'All of History', 'All of Biology', 'Algebra 2']) {
+      expect(chip(name).getAttribute('aria-pressed')).toBe('false');
+    }
+    expect(screen.getByRole('button', { name: 'Select all subjects' })).toBeTruthy();
+    // nothing picked, so saving is blocked again
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Pick at least one topic' }).disabled).toBe(true);
+  });
+
+  it('goes back to "Select all" when one subject is unpicked', async () => {
+    render(<InterestsPage initial={[1, 2, 3]} onSave={vi.fn()} isGuest={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All of History' }));
+    expect(screen.getByRole('button', { name: 'Select all subjects' })).toBeTruthy();
+  });
+
+  it('only shows Select all and the language picker once the topics have loaded', async () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    expect(screen.queryByRole('button', { name: 'Select all subjects' })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Select all subjects' })).toBeTruthy();
+    expect(screen.getByRole('combobox')).toBeTruthy();
+  });
 });
+

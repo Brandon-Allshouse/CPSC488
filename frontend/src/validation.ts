@@ -38,3 +38,29 @@ export function validateNewPassword(password: string): string | null {
   if (length > MAX_PASSWORD) return `Password must be at most ${MAX_PASSWORD} characters.`;
   return null;
 }
+
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtube-nocookie.com'];
+
+/**
+ * Gets the video id from what an admin pasted: a bare id, or a YouTube link (watch, youtu.be,
+ * shorts or embed). Returns null if it isn't one. The backend checks the id again.
+ */
+export function parseYoutubeId(input: string): string | null {
+  const trimmed = input.trim();
+  if (YOUTUBE_ID.test(trimmed)) return trimmed;
+
+  let url: URL;
+  try {
+    url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+  if (!YOUTUBE_HOSTS.includes(url.hostname.toLowerCase())) return null;
+
+  const fromQuery = url.searchParams.get('v');
+  const parts = url.pathname.split('/').filter(Boolean);
+  const fromPath = url.hostname.endsWith('youtu.be') ? parts[0] : ['shorts', 'embed', 'live'].includes(parts[0]) ? parts[1] : undefined;
+  const id = fromQuery ?? fromPath;
+  return id && YOUTUBE_ID.test(id) ? id : null;
+}

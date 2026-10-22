@@ -93,6 +93,24 @@ class FeedControllerTest {
     }
 
     @Test
+    void acceptsOnlyYoutubeVideoIdsForFeedback() {
+        assertEquals("dQw4w9WgXcQ", FeedController.checkYoutubeId("dQw4w9WgXcQ"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("short"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("dQw4w9WgXc!"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("dQw4w9WgXcQQ"));
+        assertBadRequest(() -> FeedController.checkYoutubeId("../../users"));
+        assertBadRequest(() -> FeedController.checkYoutubeId(null));
+    }
+
+    @Test
+    void acceptsOnlyLikedOrDislikedFeedback() {
+        assertEquals("liked", FeedController.checkFeedback("liked"));
+        assertEquals("disliked", FeedController.checkFeedback("disliked"));
+        assertBadRequest(() -> FeedController.checkFeedback("other"));
+        assertBadRequest(() -> FeedController.checkFeedback(null));
+    }
+
+    @Test
     void fullPageHasANextPage() {
         // the database gets asked for 11 so we know there's more
         FeedController.FeedPage page = FeedController.toPage(fakeVideos(FeedController.PAGE_SIZE + 1), 0, false);

@@ -5,20 +5,27 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.zaxxer.hikari.HikariDataSource;
+import edu.cpsc488.brainfeed.admin.AdminController;
+import edu.cpsc488.brainfeed.admin.AdminRepository;
 import edu.cpsc488.brainfeed.auth.AuthController;
 import edu.cpsc488.brainfeed.auth.BreachedPasswordChecker;
 import edu.cpsc488.brainfeed.auth.PasswordHasher;
 import edu.cpsc488.brainfeed.auth.PasswordPolicy;
+import edu.cpsc488.brainfeed.auth.SecurityLog;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.Database;
 import edu.cpsc488.brainfeed.feed.FeedController;
 import edu.cpsc488.brainfeed.feed.FeedRefresher;
+import edu.cpsc488.brainfeed.feed.PlaylistController;
+import edu.cpsc488.brainfeed.feed.PlaylistRepository;
 import edu.cpsc488.brainfeed.feed.TopicRepository;
 import edu.cpsc488.brainfeed.feed.VideoRepository;
 import edu.cpsc488.brainfeed.feed.YouTubeClient;
 import edu.cpsc488.brainfeed.saved.SavedVideoController;
 import edu.cpsc488.brainfeed.saved.SavedVideoRepository;
+import edu.cpsc488.brainfeed.history.WatchHistoryController;
+import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HandlerType;
@@ -71,6 +78,9 @@ public class App {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .collect(Collectors.toSet());
+        // Our own reverse proxies, whose X-Forwarded-For header says who the real client is (see
+        // ClientIp). Blank means nothing sits in front of the backend.
+        ClientIp clientIp = new ClientIp(settings.get("TRUSTED_PROXIES", ""));
 
         HikariDataSource dataSource = Database.connect(dbUrl, dbUser, dbPassword);
         Database.migrate(dataSource);
@@ -111,6 +121,10 @@ public class App {
             fetcher = refresher;
         }
         FeedController feed = new FeedController(topics, videos, auth, fetcher);
+        AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
+        WatchHistoryController history = new WatchHistoryController(
+                new WatchHistoryRepository(dataSource, WatchHistoryController.LIMIT), auth);
+        PlaylistController playlists = new PlaylistController(new PlaylistRepository(dataSource), auth);
 
         ObjectMapper mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
@@ -125,6 +139,8 @@ public class App {
             // endpoint (e.g. file upload) genuinely needs more.
             config.http.maxRequestSize = 16_384L;
             config.startup.showJavalinBanner = false;
+            // ctx.ip() everywhere (rate limits, security log, admin page) gives the real client.
+            config.contextResolver.ip = ctx -> clientIp.resolve(ctx.req().getRemoteAddr(), ctx.header("X-Forwarded-For"));
             // Don't advertise the server software and version to attackers.
             config.jetty.modifyHttpConfiguration(http -> http.setSendServerVersion(false));
 
@@ -148,6 +164,9 @@ public class App {
             auth.register(config.routes);
             feed.register(config.routes);
             savedVideoController.register(config.routes);
+            admin.register(config.routes);
+            history.register(config.routes);
+            playlists.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -200,6 +219,9 @@ public class App {
         }
         String origin = ctx.header("Origin");
         if (origin != null && !allowedOrigins.contains(origin)) {
+            // Logged with the origin, which is either an attack or a misconfigured ALLOWED_ORIGINS
+            // (e.g. opening the site as 127.0.0.1 instead of localhost). SecurityLog cleans the value.
+            SecurityLog.failure("cross_site_write", ctx, null, "origin " + origin + " not in ALLOWED_ORIGINS");
             throw ApiException.forbidden("Cross-site request blocked.");
         }
     }

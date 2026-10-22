@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { passwordLength, validateEmail, validateNewPassword, validateUsername } from './validation';
+import { parseYoutubeId, passwordLength, validateEmail, validateNewPassword, validateUsername } from './validation';
 
 describe('passwordLength', () => {
   it('counts each emoji as one character', () => {
@@ -65,5 +65,27 @@ describe('validateNewPassword', () => {
 
   it('does not require numbers or symbols', () => {
     expect(validateNewPassword('just some lowercase words')).toBeNull();
+  });
+});
+
+describe('parseYoutubeId', () => {
+  it('accepts a bare video id', () => {
+    expect(parseYoutubeId(' dQw4w9WgXcQ ')).toBe('dQw4w9WgXcQ');
+  });
+
+  it('reads the id out of the usual YouTube links', () => {
+    expect(parseYoutubeId('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s')).toBe('dQw4w9WgXcQ');
+    expect(parseYoutubeId('youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(parseYoutubeId('https://youtu.be/dQw4w9WgXcQ?si=abc')).toBe('dQw4w9WgXcQ');
+    expect(parseYoutubeId('https://m.youtube.com/shorts/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+    expect(parseYoutubeId('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+  });
+
+  it('rejects other sites and things that are not video ids', () => {
+    expect(parseYoutubeId('https://evil.example/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(parseYoutubeId('https://www.youtube.com/watch?v=short')).toBeNull();
+    expect(parseYoutubeId('https://www.youtube.com/@SomeChannel')).toBeNull();
+    expect(parseYoutubeId('not a link')).toBeNull();
+    expect(parseYoutubeId('')).toBeNull();
   });
 });

@@ -32,6 +32,8 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+    networks:
+      - data
 
   backend:
     build: ./backend
@@ -41,12 +43,19 @@ services:
       # ...except the database address: inside Docker, the database is reached by its service
       # name "db", not "localhost".
       DB_URL: jdbc:postgresql://db:5432/brainfeed
+      # Browsers reach the backend through the Vite dev server in the "frontend" container, so it's
+      # the one proxy whose X-Forwarded-For header is believed (see ClientIp.java).
+      TRUSTED_PROXIES: frontend
     depends_on:
       db:
         condition: service_healthy
     ports:
       # Only needed to call the API directly (e.g. curl); the frontend reaches it inside Docker.
       - "127.0.0.1:7070:7070"
+    # The only service on both networks, so every request to the database has to go through it.
+    networks:
+      - data
+      - web
 
   frontend:
     image: node:24-trixie-slim
@@ -69,6 +78,9 @@ services:
       - "127.0.0.1:5173:5173"
     depends_on:
       - backend
+    # Not on the data network, so the frontend container can't reach the database at all.
+    networks:
+      - web
 
   # Optional database GUI in the browser: `docker compose --profile tools up -d pgadmin`, then open
   # http://localhost:5050 (see "Looking at the database" in the README). The "tools" profile means
@@ -93,6 +105,8 @@ services:
       - "127.0.0.1:5050:80"
     depends_on:
       - db
+    networks:
+      - data
 
   # Runs the backend unit tests: `docker compose run --rm backend-tests`
   # The "test" profile means it doesn't start with `docker compose up`.
@@ -108,6 +122,11 @@ services:
       - ./backend:/app
       # Keeps downloaded libraries between runs so tests start fast after the first time.
       - maven-cache:/root/.m2
+
+# Keeps the layers apart: database <-> backend on "data", backend <-> frontend on "web".
+networks:
+  data:
+  web:
 
 volumes:
   brainfeed-pgdata:

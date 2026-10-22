@@ -7,7 +7,7 @@ import LoginPage from './LoginPage';
 
 vi.mock('../api/auth', () => ({ login: vi.fn(), register: vi.fn() }));
 
-const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z' };
+const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const onAuthenticated = vi.fn();
 const onGuest = vi.fn();
 
@@ -35,7 +35,7 @@ describe('LoginPage', () => {
   });
 
   it('shows the brain logo in the top-left corner', () => {
-    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).className).toBe('auth-logo');
+    expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('auth-logo')).toBe(true);
   });
 
   it('logs in and passes the user up', async () => {
