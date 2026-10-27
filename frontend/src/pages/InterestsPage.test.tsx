@@ -32,6 +32,34 @@ describe('InterestsPage', () => {
     expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('auth-logo')).toBe(true);
   });
 
+  it('narrows the subjects down with the search box', async () => {
+    const { container } = render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    await screen.findByRole('button', { name: 'All of Math' });
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'ALGEBRA' } });
+    // Math stays because Algebra 2 is part of it, and it opens so Algebra 2 can be seen
+    const shown = [...container.querySelectorAll('details.subject')];
+    expect(shown).toHaveLength(1);
+    expect((shown[0] as HTMLDetailsElement).open).toBe(true);
+    expect(screen.getByRole('button', { name: 'Algebra 2' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'All of History' })).toBeNull();
+  });
+
+  it('keeps picks made before searching', async () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'All of History' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'math' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: '' } });
+    expect(screen.getByRole('button', { name: 'All of History' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('says when nothing matches the search', async () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    await screen.findByRole('button', { name: 'All of Math' });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'underwater basket weaving' } });
+    expect(screen.getByRole('status').textContent).toContain('Nothing matches');
+  });
+
   it('lists the topics from the backend', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     expect(await screen.findByRole('button', { name: 'All of Math' })).toBeTruthy();

@@ -38,6 +38,43 @@ describe('UpNext', () => {
     expect(screen.getByText(/all caught up/)).toBeTruthy();
   });
 
+  it('suggests subjects to add and adds the one clicked', async () => {
+    const onAddTopic = vi.fn().mockResolvedValue(undefined);
+    const suggestions = [
+      { id: 2, name: 'Biology', parentId: null },
+      { id: 3, name: 'History', parentId: null },
+    ];
+    render(<UpNext videos={videos} currentIndex={0} loading={false} onSelect={vi.fn()} suggestions={suggestions} onAddTopic={onAddTopic} />);
+
+    expect(screen.getByRole('heading', { name: 'Explore more subjects' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Biology to your topics' }));
+    expect(onAddTopic).toHaveBeenCalledWith(2);
+    // the other buttons wait until this one is done, so two can't be added at once
+    expect((screen.getByRole('button', { name: 'Add History to your topics' }) as HTMLButtonElement).disabled).toBe(true);
+    await vi.waitFor(() => expect((screen.getByRole('button', { name: 'Add History to your topics' }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('shows an error if adding a subject fails', async () => {
+    const onAddTopic = vi.fn().mockRejectedValue(new Error('Could not save your interests.'));
+    render(
+      <UpNext
+        videos={videos}
+        currentIndex={0}
+        loading={false}
+        onSelect={vi.fn()}
+        suggestions={[{ id: 2, name: 'Biology', parentId: null }]}
+        onAddTopic={onAddTopic}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Add Biology to your topics' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save your interests.');
+  });
+
+  it('hides the suggestions when there are none', () => {
+    render(<UpNext videos={videos} currentIndex={0} loading={false} onSelect={vi.fn()} suggestions={[]} onAddTopic={vi.fn()} />);
+    expect(screen.queryByRole('heading', { name: 'Explore more subjects' })).toBeNull();
+  });
+
   it('lists the keyboard shortcuts', () => {
     render(<UpNext videos={[]} currentIndex={0} loading={false} onSelect={vi.fn()} />);
     expect(screen.getByText('Next video')).toBeTruthy();

@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed.saved;
 
 import edu.cpsc488.brainfeed.ApiException;
+import edu.cpsc488.brainfeed.db.Database;
 import edu.cpsc488.brainfeed.feed.Video;
 
 import javax.sql.DataSource;
@@ -31,10 +32,10 @@ public class SavedVideoRepository {
      *
      * Returns false if the video does not exist in the videos table.
      *
-     * @throws ApiException 409 if the user already has {@link #MAX_SAVED_VIDEOS} saved
+     * @throws ApiException 409 if the user already has {@link #MAX_SAVED_VIDEOS} saved (enforced even
+     *                      when several saves arrive at once)
      */
     public boolean save(long userId, String youtubeId) {
-        // The limit check is inside the INSERT so two requests at once can't both slip past it.
         String sql = """
                 INSERT INTO saved_videos (user_id, youtube_id)
                 SELECT ?, youtube_id FROM videos
@@ -43,7 +44,10 @@ public class SavedVideoRepository {
                 ON CONFLICT (user_id, youtube_id) DO NOTHING
                 """;
 
-        try (Connection conn = dataSource.getConnection()) {
+        // Locking the user's row first makes two saves at once take turns, so they can't both see
+        // 499 and both insert (see Database.inTransaction).
+        return Database.inTransaction(dataSource, conn -> {
+            lockUser(conn, userId);
             try (PreparedStatement insert = conn.prepareStatement(sql)) {
                 insert.setLong(1, userId);
                 insert.setString(2, youtubeId);
@@ -62,9 +66,13 @@ public class SavedVideoRepository {
                 return false;
             }
             throw ApiException.conflict("Your Study notebook can hold at most " + MAX_SAVED_VIDEOS + " videos.");
+        });
+    }
 
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+    private static void lockUser(Connection conn, long userId) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM users WHERE id = ? FOR NO KEY UPDATE")) {
+            ps.setLong(1, userId);
+            ps.executeQuery().close();
         }
     }
 

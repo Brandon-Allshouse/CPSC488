@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
-import { Check, ChevronRight, CircleAlert } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, Search } from 'lucide-react';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import LanguageSelect from '@/components/LanguageSelect';
 
@@ -24,6 +25,7 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
   const [startOpen] = useState(() => new Set(initial));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     fetchTopics()
@@ -50,6 +52,12 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(subjectIds));
+  }
+
+  // A subject matches if its name or any of its sub-subjects' names contain the search text.
+  const search = query.trim().toLowerCase();
+  function matches(subject: Topic, subs: Topic[]) {
+    return !search || [subject, ...subs].some((topic) => topic.name.toLowerCase().includes(search));
   }
 
   async function handleSave() {
@@ -95,6 +103,28 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
       )}
 
       {topics && (
+        <div className="relative">
+          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            id="topic-search"
+            type="search"
+            aria-label="Search subjects and topics"
+            placeholder="Search, e.g. algebra or cooking"
+            className="pl-9"
+            maxLength={50}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      )}
+
+      {topics && search && !topics.some((topic) => topic.name.toLowerCase().includes(search)) && (
+        <p className="py-4 text-center text-sm text-muted-foreground" role="status">
+          Nothing matches “{query.trim()}”. Try a shorter word.
+        </p>
+      )}
+
+      {topics && (
         <div id="subject-list" className="flex max-h-[55dvh] flex-col gap-2 overflow-y-auto pr-1">
           {topics
             .filter((topic) => topic.parentId === null)
@@ -102,7 +132,9 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
               const subs = topics.filter((topic) => topic.parentId === subject.id);
               const picked = [subject, ...subs].filter((topic) => selected.has(topic.id)).length;
               // Sections start open if something in them was already picked.
-              const open = [subject, ...subs].some((topic) => startOpen.has(topic.id));
+              if (!matches(subject, subs)) return null;
+              // While searching, matching subjects open so the matching topic is visible.
+              const open = Boolean(search) || [subject, ...subs].some((topic) => startOpen.has(topic.id));
               return (
                 <details
                   key={subject.id}

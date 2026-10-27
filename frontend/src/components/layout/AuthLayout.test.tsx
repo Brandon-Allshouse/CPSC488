@@ -22,6 +22,25 @@ describe('AuthLayout', () => {
     expect(container.querySelector('main')!.id).toBe('login-page');
   });
 
+  it('puts the side panel next to the card when there is one', () => {
+    const { container } = render(
+      <AuthLayout name="login" title="Welcome back" description="Log in to continue." aside={<p>About BrainFeed</p>}>
+        <p>Form goes here</p>
+      </AuthLayout>,
+    );
+    expect(container.querySelector('.auth-aside')!.textContent).toBe('About BrainFeed');
+    expect(screen.getByText('Form goes here')).toBeTruthy();
+  });
+
+  it('has no side panel by default', () => {
+    const { container } = render(
+      <AuthLayout name="interests" title="Pick your interests" description="Choose a few.">
+        <p>Topics</p>
+      </AuthLayout>,
+    );
+    expect(container.querySelector('.auth-aside')).toBeNull();
+  });
+
   it('labels the card with its title for screen readers', () => {
     render(
       <AuthLayout name="interests" title="Pick your interests" description="Choose a few.">

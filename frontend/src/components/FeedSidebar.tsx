@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { Heart, History, Home, LogIn, Pencil, ShieldCheck, Trophy } from 'lucide-react';
+import { Bookmark, Eye, Heart, History, Home, LogIn, Pencil, ShieldCheck, Trophy } from 'lucide-react';
 import type { User } from '../api/auth';
 import brainLogo from '../assets/brainfeed-logo.png';
 import { Button } from '@/components/ui/button';
+import { monthYear } from '@/lib/activity';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -17,6 +18,13 @@ interface Props {
   onShowAdmin: () => void;
   /** For guests this goes to the login page. */
   onLogin: () => void;
+  /** Signed-in users' numbers for the "Your progress" box. Left out, the box isn't shown. */
+  activity?: {
+    /** A string so a full history can say "25+" (see formatCapped). */
+    watchedToday: string;
+    saved: number;
+    liked: number;
+  };
 }
 
 function NavItem({ icon, active, onClick, children }: {
@@ -53,6 +61,7 @@ export default function FeedSidebar({
   onShowLeaderboard,
   onShowAdmin,
   onLogin,
+  activity,
 }: Props) {
   return (
     <aside className="feed-sidebar hidden w-64 shrink-0 flex-col gap-6 overflow-y-auto border-r bg-card/40 px-3 py-5 lg:flex" aria-label="Sidebar">
@@ -99,6 +108,24 @@ export default function FeedSidebar({
         )}
       </section>
 
+      {user && activity && (
+        <section className="feed-activity mx-1 flex flex-col gap-3 rounded-xl border bg-background p-4" aria-labelledby="feed-activity-title">
+          <div>
+            <h2 id="feed-activity-title" className="text-sm font-semibold">
+              Your progress
+            </h2>
+            {monthYear(user.createdAt) && (
+              <p className="text-xs text-muted-foreground">Learning since {monthYear(user.createdAt)}</p>
+            )}
+          </div>
+          <dl className="grid grid-cols-3 gap-2 text-center">
+            <ActivityNumber icon={<Eye />} label="Today" value={activity.watchedToday} />
+            <ActivityNumber icon={<Bookmark />} label="Saved" value={String(activity.saved)} />
+            <ActivityNumber icon={<Heart />} label="Liked" value={String(activity.liked)} />
+          </dl>
+        </section>
+      )}
+
       {!user && (
         <section className="mx-1 flex flex-col gap-2 rounded-xl border bg-primary/5 p-4" aria-label="Sign in">
           <p className="text-sm font-semibold">Keep what you learn</p>
@@ -117,5 +144,19 @@ export default function FeedSidebar({
         <p className="text-xs leading-snug text-muted-foreground">Learn something new with every scroll.</p>
       </div>
     </aside>
+  );
+}
+
+// One of the three numbers in "Your progress". A <dl> so screen readers read "Today: 3".
+function ActivityNumber({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 rounded-lg bg-muted/50 px-1 py-2">
+      <span aria-hidden="true" className="text-primary [&_svg]:size-4">
+        {icon}
+      </span>
+      {/* dt has to come first in the markup; order-last puts the label under the number. */}
+      <dt className="order-last text-[11px] text-muted-foreground">{label}</dt>
+      <dd className="text-lg leading-tight font-semibold">{value}</dd>
+    </div>
   );
 }

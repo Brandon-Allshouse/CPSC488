@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Check, ExternalLink, Link2, Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
 import { timeAgo } from '@/lib/format';
@@ -10,6 +10,11 @@ import SaveMenu from './SaveMenu';
 // until you hit play. If you change either domain, update the CSP in vite.config.ts too.
 const EMBED_URL = 'https://www.youtube-nocookie.com/embed/';
 const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
+// The normal YouTube page, for "Watch on YouTube" and "Copy link". Opening it is a plain link, so
+// it doesn't need a CSP entry.
+const WATCH_URL = 'https://www.youtube.com/watch?v=';
+// How long "Copied" shows before the button goes back to "Copy link".
+const COPIED_MS = 2000;
 
 interface Props {
   video: FeedVideo;
@@ -95,6 +100,24 @@ export default function VideoCard({
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
   const cardRef = useRef<HTMLElement>(null);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = setTimeout(() => setCopyState('idle'), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copyState]);
+
+  // The clipboard API only exists on https and localhost, and the user can block it, so failing is
+  // normal and just shows "Couldn't copy".
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(watchUrl);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+  }
 
   // Stop the video once it's mostly scrolled out of view, so it doesn't keep playing off-screen.
   useEffect(() => {
@@ -112,6 +135,7 @@ export default function VideoCard({
 
   // The backend only stores ids matching YouTube's format; encoding is a second safeguard.
   const id = encodeURIComponent(video.youtubeId);
+  const watchUrl = `${WATCH_URL}${id}`;
 
   async function changeFeedback(next: VideoFeedback | null) {
     if (!onFeedbackChange) return;
@@ -224,14 +248,35 @@ export default function VideoCard({
           </span>
           {topicName && <span className="rounded-full border bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">{topicName}</span>}
           {published && <span className="text-xs">{published}</span>}
+          <span className="video-links ml-auto flex items-center gap-1">
+            <a
+              href={watchUrl}
+              // noopener + noreferrer: the new tab can't reach back into BrainFeed (reverse tabnabbing).
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Watch on YouTube (opens in a new tab)"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors duration-150 hover:bg-accent hover:text-foreground"
+            >
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+              YouTube
+            </a>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors duration-150 hover:bg-accent hover:text-foreground"
+              onClick={() => void copyLink()}
+            >
+              {copyState === 'copied' ? <Check aria-hidden="true" className="size-3.5 text-success" /> : <Link2 aria-hidden="true" className="size-3.5" />}
+              {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? "Couldn't copy" : 'Copy link'}
+            </button>
+          </span>
         </div>
-        {/* Placeholder until the LLM summaries on the roadmap fill it in. */}
+        {/* Placeholder until the LLM summaries on the roadmap fill it in. Team rule: no "coming soon" wording. */}
         <div className="video-summary-label mt-1 flex flex-col gap-1 rounded-lg bg-muted/60 p-3 text-sm">
           <p className="flex items-center gap-2">
             <Sparkles aria-hidden="true" className="size-4 text-primary" />
             <strong>Video Summary</strong>
           </p>
-          <p className="text-muted-foreground">Key points for this video are on the way.</p>
+          <p className="text-muted-foreground">No summary for this video.</p>
         </div>
       </section>
     </article>

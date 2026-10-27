@@ -36,6 +36,11 @@ vi.mock('./api/savedVideos', () => ({
   removeSavedVideo: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('./api/history', () => ({
+  fetchWatchHistory: vi.fn().mockResolvedValue({ videos: [], limit: 25 }),
+  recordWatch: vi.fn().mockResolvedValue(undefined),
+}));
+
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 
 beforeEach(() => {
@@ -119,5 +124,17 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(await screen.findByText('Welcome back')).toBeTruthy();
     expect(logout).toHaveBeenCalled();
+  });
+
+  it('adds a suggested subject from the feed and starts the feed over with it', async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchMyInterests).mockResolvedValue([1]);
+    vi.mocked(saveMyInterests).mockResolvedValue([1, 2]);
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add History to your topics' }));
+    await vi.waitFor(() => expect(saveMyInterests).toHaveBeenCalledWith([1, 2]));
+    // the new feed is built from both, so there's nothing left to suggest
+    await vi.waitFor(() => expect(screen.queryByRole('heading', { name: 'Explore more subjects' })).toBeNull());
   });
 });

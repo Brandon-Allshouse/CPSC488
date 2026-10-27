@@ -356,6 +356,24 @@ describe('YourVideosPage', () => {
   });
 
 
+  it('sums up the lists at the top once they load', async () => {
+    vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [savedVideo], dislikedVideos: [] });
+    renderPage();
+    const summary = screen.getByRole('region', { name: 'Your videos summary' });
+    // nothing has loaded yet, so it shows dashes instead of zeros
+    expect(summary.textContent).toContain('Liked–');
+
+    await vi.waitFor(() => expect(summary.textContent).toContain('Liked1'));
+    expect(summary.textContent).toContain('Saved videos1');
+    expect(summary.textContent).toContain('Study notebook0');
+    expect(summary.textContent).toContain('Playlists2');
+  });
+
+  it('has no summary for guests', () => {
+    renderPage(null, null);
+    expect(screen.queryByRole('region', { name: 'Your videos summary' })).toBeNull();
+  });
+
   it('keeps an unfinished notebook note when the user cancels changing tabs', async () => {
     vi.mocked(fetchSavedVideos).mockResolvedValue([
       { youtubeId: 'video000004', title: 'Notebook lesson', channelTitle: 'Study channel', topicId: 1, publishedAt: '2026-10-01T00:00:00Z' },

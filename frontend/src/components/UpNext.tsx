@@ -1,5 +1,7 @@
-import { Keyboard, Loader2 } from 'lucide-react';
-import type { FeedVideo } from '../api/feed';
+import { useState } from 'react';
+import { Compass, Keyboard, Loader2, Plus } from 'lucide-react';
+import type { FeedVideo, Topic } from '../api/feed';
+import { Button } from '@/components/ui/button';
 
 const THUMBNAIL_URL = 'https://i.ytimg.com/vi/';
 // Enough to fill the column on a laptop without turning it into a second feed.
@@ -13,11 +15,32 @@ interface Props {
   loading: boolean;
   /** Scrolls the feed to this video. */
   onSelect: (index: number) => void;
+  /** Subjects the user hasn't picked, for "Explore more subjects". Empty or left out hides it. */
+  suggestions?: Topic[];
+  /** Adds a subject to the user's topics (the feed then starts over with it). Throws on failure. */
+  onAddTopic?: (topicId: number) => Promise<void>;
 }
 
 // The right column on wide screens: the next few videos in the feed, so there's always something
 // to look forward to, and the keyboard shortcuts. Hidden on smaller screens.
-export default function UpNext({ videos, currentIndex, loading, onSelect }: Props) {
+export default function UpNext({ videos, currentIndex, loading, onSelect, suggestions = [], onAddTopic }: Props) {
+  const [adding, setAdding] = useState<number | null>(null);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  async function addTopic(topicId: number) {
+    if (!onAddTopic || adding !== null) return;
+    setAdding(topicId);
+    setAddError(null);
+    try {
+      await onAddTopic(topicId);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Could not add that subject.');
+    } finally {
+      // On success the feed usually starts over and this column goes away, but not in every case.
+      setAdding(null);
+    }
+  }
+
   const upcoming = videos.slice(currentIndex + 1, currentIndex + 1 + SHOWN);
 
   return (
@@ -71,6 +94,41 @@ export default function UpNext({ videos, currentIndex, loading, onSelect }: Prop
           </p>
         )}
       </section>
+
+      {onAddTopic && suggestions.length > 0 && (
+        <section className="feed-explore flex flex-col gap-3 border-t pt-5" aria-labelledby="explore-title">
+          <div>
+            <h2 id="explore-title" className="flex items-center gap-2 text-base font-semibold">
+              <Compass aria-hidden="true" className="size-4 text-primary" />
+              Explore more subjects
+            </h2>
+            <p className="text-xs text-muted-foreground">Add one to mix it into your feed.</p>
+          </div>
+          <ul className="flex flex-col gap-1.5">
+            {suggestions.map((topic) => (
+              <li key={topic.id} className="flex items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2">
+                <span className="truncate text-sm font-medium">{topic.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-primary"
+                  aria-label={`Add ${topic.name} to your topics`}
+                  disabled={adding !== null}
+                  onClick={() => void addTopic(topic.id)}
+                >
+                  {adding === topic.id ? <Loader2 aria-hidden="true" className="animate-spin" /> : <Plus aria-hidden="true" />}
+                  Add
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {addError && (
+            <p className="text-xs text-destructive" role="alert">
+              {addError}
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="mt-auto flex flex-col gap-2 rounded-xl border bg-background p-4 text-sm" aria-labelledby="shortcuts-title">
         <h2 id="shortcuts-title" className="flex items-center gap-2 font-semibold">

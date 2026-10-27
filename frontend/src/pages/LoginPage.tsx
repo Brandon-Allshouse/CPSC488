@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { login, register, type User } from '../api/auth';
 import { CircleAlert } from 'lucide-react';
 import AuthLayout from '@/components/layout/AuthLayout';
+import ProductPitch from '@/components/ProductPitch';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +79,7 @@ export default function LoginPage({ onAuthenticated, onGuest }: Props) {
   return (
     <AuthLayout
       name="login"
+      aside={<ProductPitch />}
       title={isRegister ? 'Create your account' : 'Welcome back'}
       description={
         isRegister
