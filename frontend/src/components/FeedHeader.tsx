@@ -98,8 +98,8 @@ export default function FeedHeader({
         title="Go to your feed"
         onClick={onGoHome}
       >
-        <img className="feed-brand-logo size-9 rounded-lg object-cover" src={brainLogo} alt="" />
-        <span className="brand text-lg font-bold tracking-tight">BrainFeed</span>
+        <img className="feed-brand-logo size-14 rounded-xl object-cover" src={brainLogo} alt="" />
+        <span className="brand text-2xl font-bold tracking-tight sm:text-[1.75rem]">BrainFeed</span>
       </button>
 
       <div className="flex items-center gap-2">
