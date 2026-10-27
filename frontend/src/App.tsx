@@ -99,6 +99,8 @@ export default function App() {
           topicIds={interests}
           user={user}
           onEditInterests={() => setEditingInterests(true)}
+          // Saving changes the interests, so the feed starts over with the new subject mixed in.
+          onAddTopic={(topicId) => handleSaveInterests([...interests, topicId])}
           onLogout={handleLogout}
         />
       );

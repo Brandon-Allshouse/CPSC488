@@ -36,6 +36,8 @@ describe('VideoCard', () => {
     expect(summaryBox).toBeTruthy();
     expect(screen.getByText('Video Summary').tagName).toBe('STRONG');
     expect(summaryBox.textContent).not.toMatch(/unable to be rendered/i);
+    // no promises about features that don't exist yet
+    expect(summaryBox.textContent).not.toMatch(/coming soon|on the way/i);
     expect(summaryBox.textContent!.indexOf('Test Channel')).toBeLessThan(
       summaryBox.textContent!.indexOf('Video Summary'),
     );
@@ -247,5 +249,31 @@ describe('VideoCard', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'New playlist name' }), { target: { value: 'Biology' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create playlist' }));
     await waitFor(() => expect(onCreatePlaylist).toHaveBeenCalledWith('dQw4w9WgXcQ', 'Biology'));
+  });
+  it('links to the video on YouTube in a new tab that cannot reach back into the page', () => {
+    renderVideoCard();
+    const link = screen.getByRole('link', { name: 'Watch on YouTube (opens in a new tab)' });
+    expect(link.getAttribute('href')).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('copies the video link', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderVideoCard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+    expect(writeText).toHaveBeenCalledWith('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  });
+
+  it("says so when the browser won't let it copy", async () => {
+    // e.g. the page isn't on https, or the user blocked clipboard access
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    renderVideoCard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+    expect(await screen.findByRole('button', { name: "Couldn't copy" })).toBeTruthy();
   });
 });

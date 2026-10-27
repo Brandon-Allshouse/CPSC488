@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed.feed;
 
 import edu.cpsc488.brainfeed.ApiException;
+import edu.cpsc488.brainfeed.db.Database;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -76,31 +77,36 @@ public class PlaylistRepository {
         if (WATCH_LATER.equalsIgnoreCase(name)) {
             throw ApiException.conflict("You already have a playlist with that name.");
         }
-        // The limit check is part of the insert, so it can't be skipped. (Two requests at the exact
-        // same moment could still end one over the limit, which is harmless.)
+        // The user's row is locked first, so two creates at once take turns and can't both get past
+        // the limit (see Database.inTransaction).
         String sql = """
                 INSERT INTO playlists (user_id, name)
                 SELECT ?, ?
                 WHERE (SELECT count(*) FROM playlists WHERE user_id = ?) < ?
                 RETURNING id
                 """;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, userId);
-            ps.setString(2, name);
-            ps.setLong(3, userId);
-            ps.setInt(4, MAX_PLAYLISTS);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) {
-                    throw ApiException.conflict("You can have at most " + MAX_PLAYLISTS + " playlists.");
+        try {
+            return Database.inTransaction(dataSource, conn -> {
+                lock(conn, "SELECT 1 FROM users WHERE id = ? FOR NO KEY UPDATE", userId, null);
+                try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                    ps.setLong(1, userId);
+                    ps.setString(2, name);
+                    ps.setLong(3, userId);
+                    ps.setInt(4, MAX_PLAYLISTS);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            throw ApiException.conflict("You can have at most " + MAX_PLAYLISTS + " playlists.");
+                        }
+                        return new Playlist(rs.getLong("id"), name, false, new ArrayList<>());
+                    }
                 }
-                return new Playlist(rs.getLong("id"), name, false, new ArrayList<>());
-            }
-        } catch (SQLException e) {
-            if (UNIQUE_VIOLATION.equals(e.getSQLState())) {
+            });
+        } catch (RuntimeException e) {
+            // inTransaction wraps SQL errors; a duplicate name is the one we expect.
+            if (e.getCause() instanceof SQLException cause && UNIQUE_VIOLATION.equals(cause.getSQLState())) {
                 throw ApiException.conflict("You already have a playlist with that name.");
             }
-            throw new RuntimeException(e);
+            throw e;
         }
     }
 
@@ -124,9 +130,6 @@ public class PlaylistRepository {
      *                      409 if the playlist is full
      */
     public void addVideo(long userId, long playlistId, String youtubeId) {
-        if (!owns(userId, playlistId)) {
-            throw ApiException.notFound("Playlist not found.");
-        }
         String sql = """
                 INSERT INTO playlist_videos (playlist_id, youtube_id)
                 SELECT ?, youtube_id FROM videos
@@ -134,23 +137,28 @@ public class PlaylistRepository {
                   AND (SELECT count(*) FROM playlist_videos WHERE playlist_id = ?) < ?
                 ON CONFLICT (playlist_id, youtube_id) DO NOTHING
                 """;
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, playlistId);
-            ps.setString(2, youtubeId);
-            ps.setLong(3, playlistId);
-            ps.setInt(4, MAX_VIDEOS_PER_PLAYLIST);
-            if (ps.executeUpdate() == 0 && !contains(conn, playlistId, youtubeId)) {
-                // Nothing added and it wasn't already there: either the video doesn't exist or the
-                // playlist is full.
-                if (!videoExists(conn, youtubeId)) {
-                    throw ApiException.badRequest("Video not found.");
-                }
-                throw ApiException.conflict("A playlist can hold at most " + MAX_VIDEOS_PER_PLAYLIST + " videos.");
+        // Locking the playlist's row checks it's theirs and makes two adds at once take turns, so
+        // they can't both see 499 and both insert. A playlist deleted meanwhile is simply not found.
+        Database.inTransaction(dataSource, conn -> {
+            if (!lock(conn, "SELECT 1 FROM playlists WHERE id = ? AND user_id = ? FOR NO KEY UPDATE", playlistId, userId)) {
+                throw ApiException.notFound("Playlist not found.");
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+                ps.setLong(1, playlistId);
+                ps.setString(2, youtubeId);
+                ps.setLong(3, playlistId);
+                ps.setInt(4, MAX_VIDEOS_PER_PLAYLIST);
+                if (ps.executeUpdate() == 0 && !contains(conn, playlistId, youtubeId)) {
+                    // Nothing added and it wasn't already there: either the video doesn't exist or the
+                    // playlist is full.
+                    if (!videoExists(conn, youtubeId)) {
+                        throw ApiException.badRequest("Video not found.");
+                    }
+                    throw ApiException.conflict("A playlist can hold at most " + MAX_VIDEOS_PER_PLAYLIST + " videos.");
+                }
+            }
+            return null;
+        });
     }
 
     /** Removes a video from one of the user's playlists. Returns false if the playlist isn't theirs. */
@@ -202,6 +210,22 @@ public class PlaylistRepository {
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Runs one of the row-locking SELECTs above. Returns false if the row doesn't exist (or isn't
+     * the user's). {@code second} is null for the one-placeholder query.
+     */
+    private static boolean lock(Connection conn, String sql, long first, Long second) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, first);
+            if (second != null) {
+                ps.setLong(2, second);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         }
     }
 

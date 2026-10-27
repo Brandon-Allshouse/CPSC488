@@ -53,9 +53,9 @@ public class AuthController {
     // the account exists (prevents account enumeration by timing).
     private final String dummyHash;
 
-    // NIST SP 800-63B §3.2.2 caps consecutive failures at 100; we're stricter:
-    // 10 failed logins per 15 minutes, tracked separately per account and per IP.
-    private final LoginRateLimiter loginFailures = new LoginRateLimiter(10, Duration.ofMinutes(15));
+    // Failed logins: 10 per IP, 10 per account from one IP, 100 per account overall, per 15 minutes.
+    // See LoginThrottle for why the overall account limit is the loose one.
+    private final LoginThrottle loginFailures = new LoginThrottle();
     // 20 signup attempts per hour per IP.
     private final LoginRateLimiter registrations = new LoginRateLimiter(20, Duration.ofHours(1));
 
@@ -120,9 +120,8 @@ public class AuthController {
             throw ApiException.badRequest("Email and password are required.");
         }
 
-        String ipKey = "ip:" + ctx.ip();
-        String emailKey = "email:" + email;
-        if (loginFailures.isLimited(ipKey) || loginFailures.isLimited(emailKey)) {
+        String ip = ctx.ip();
+        if (loginFailures.isBlocked(ip, email)) {
             SecurityLog.failure("login", ctx, null, "rate limited");
             throw ApiException.tooManyRequests(
                     "Too many failed login attempts. Please try again in "
@@ -131,7 +130,7 @@ public class AuthController {
 
         // Oversized input can't match a valid account; reject it without spending time hashing.
         if (email.length() > MAX_EMAIL || PasswordPolicy.length(password) > PasswordPolicy.MAX_LENGTH) {
-            loginFailures.record(ipKey);
+            loginFailures.recordJunk(ip);
             SecurityLog.failure("login", ctx, null, "oversized input");
             throw ApiException.unauthorized(BAD_CREDENTIALS);
         }
@@ -141,8 +140,7 @@ public class AuthController {
         boolean passwordOk = hasher.verify(password, hash);
 
         if (found.isEmpty() || !passwordOk) {
-            loginFailures.record(ipKey);
-            loginFailures.record(emailKey);
+            loginFailures.recordFailure(ip, email);
             SecurityLog.failure("login", ctx, found.map(c -> c.user().id()).orElse(null),
                     found.isEmpty() ? "unknown account" : "wrong password");
             // Same message either way, so attackers can't tell which emails have accounts.
@@ -156,9 +154,7 @@ public class AuthController {
             throw ApiException.forbidden("This account has been suspended.");
         }
 
-        // A correct password clears that account's failures. The IP's count isn't cleared, so an
-        // attacker can't reset their limit by logging into their own account between guesses.
-        loginFailures.reset(emailKey);
+        loginFailures.recordSuccess(ip, email);
         sessions.deleteExpired();
 
         // Always issue a brand-new session on login (prevents session fixation) and drop any

@@ -19,7 +19,8 @@ import UpNext from '../components/UpNext';
 import VideoCard, { videoCardId } from '../components/VideoCard';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { recordWatch } from '../api/history';
+import { fetchWatchHistory, recordWatch } from '../api/history';
+import { countWatchedToday, formatCapped } from '@/lib/activity';
 import AdminPage from './AdminPage';
 import LeaderboardPage from './LeaderboardPage';
 import YourVideosPage from './YourVideosPage';
@@ -36,12 +37,29 @@ interface Props {
   topicIds: number[];
   user: User | null;
   onEditInterests: () => void;
+  /** Adds one topic to the user's interests, from "Explore more subjects". Throws on failure. */
+  onAddTopic?: (topicId: number) => Promise<void>;
   onLogout: () => void;
+}
+
+// How many subjects "Explore more subjects" suggests.
+const SUGGESTIONS = 4;
+
+/**
+ * Subjects the feed isn't built from yet, to suggest adding. Starts at a spot picked by the feed's
+ * seed so each visit suggests different ones, but they don't jump around while scrolling.
+ */
+export function suggestSubjects(topics: Topic[], topicIds: number[], seed: number, count = SUGGESTIONS) {
+  const picked = new Set(topicIds);
+  const subjects = topics.filter((topic) => topic.parentId === null && !picked.has(topic.id));
+  if (subjects.length <= count) return subjects;
+  const start = seed % subjects.length;
+  return [...subjects.slice(start), ...subjects.slice(0, start)].slice(0, count);
 }
 
 // The scrolling video feed. Loads 10 videos at a time as the user nears the bottom.
 // App.tsx remounts this page when the interests change, which starts a fresh feed.
-export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: Props) {
+export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, onLogout }: Props) {
   // A random seed per visit gives a new shuffle each time, but stays fixed while scrolling so
   // pages don't repeat videos.
   const [seed] = useState(() => Math.floor(Math.random() * 1_000_000_000));
@@ -69,6 +87,27 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
       cancelled = true;
     };
   }, []);
+
+  // When the user's recent videos were watched, for "Today" in the sidebar's progress box. null
+  // until loaded; if loading fails it stays null and the box shows a dash.
+  const [watchTimes, setWatchTimes] = useState<{ youtubeId: string; watchedAt: string }[] | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(25);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    fetchWatchHistory()
+      .then((history) => {
+        if (!cancelled) {
+          setWatchTimes(history.videos);
+          setHistoryLimit(history.limit);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   // Videos in the Study notebook, so each card's bookmark shows whether it's saved there.
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -372,7 +411,15 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
   // if saving fails, the video still plays, and the history just misses that one.
   function recordPlay(youtubeId: string) {
     if (user) {
-      recordWatch(youtubeId).catch(() => undefined);
+      recordWatch(youtubeId)
+        .then(() =>
+          // Same as the backend: a rewatched video moves to the top instead of counting twice.
+          setWatchTimes((current) => [
+            { youtubeId, watchedAt: new Date().toISOString() },
+            ...(current ?? []).filter((watched) => watched.youtubeId !== youtubeId),
+          ]),
+        )
+        .catch(() => undefined);
     }
   }
 
@@ -399,6 +446,16 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
 
   const topicName = new Map(topics.map((topic) => [topic.id, topic.name]));
   const pickedTopicNames = topicIds.flatMap((id) => topicName.get(id) ?? []);
+
+  // A video in the notebook and a playlist counts once, same as the Saved tab on "Your videos".
+  const savedCount = new Set([...savedIds, ...(playlists ?? []).flatMap((playlist) => playlist.videos.map((video) => video.youtubeId))]).size;
+  const activity = user
+    ? {
+        watchedToday: watchTimes ? formatCapped(countWatchedToday(watchTimes), historyLimit) : '–',
+        saved: savedCount,
+        liked: Object.values(feedbackByVideo).filter((choice) => choice === 'liked').length,
+      }
+    : undefined;
 
   const isEmpty = videos.length === 0 && nextPage === null && !loading && !error && !finding;
 
@@ -455,6 +512,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
           onShowLeaderboard={navigation.onShowLeaderboard}
           onShowAdmin={navigation.onShowAdmin}
           onLogin={onLogout}
+          activity={activity}
         />
 
         <main className="relative min-w-0 flex-1">
@@ -531,7 +589,14 @@ export default function FeedPage({ topicIds, user, onEditInterests, onLogout }: 
           </div>
         </main>
 
-        <UpNext videos={videos} currentIndex={currentIndex} loading={loading || finding} onSelect={scrollToVideo} />
+        <UpNext
+          videos={videos}
+          currentIndex={currentIndex}
+          loading={loading || finding}
+          onSelect={scrollToVideo}
+          suggestions={suggestSubjects(topics, topicIds, seed)}
+          onAddTopic={onAddTopic}
+        />
       </div>
     </div>
   );

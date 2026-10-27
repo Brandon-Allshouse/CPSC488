@@ -59,4 +59,21 @@ describe('FeedSidebar', () => {
     rerender(<FeedSidebar user={testUser} topicNames={[]} {...handlers} />);
     expect(screen.queryByRole('button', { name: 'Log in or sign up' })).toBeNull();
   });
+
+  it('shows a signed-in user their progress', () => {
+    render(<FeedSidebar user={testUser} topicNames={[]} {...handlers} activity={{ watchedToday: '3', saved: 4, liked: 7 }} />);
+
+    const progress = screen.getByRole('region', { name: 'Your progress' });
+    expect(progress.textContent).toContain('Learning since October 2026');
+    // each number is paired with its label in a description list
+    const terms = [...progress.querySelectorAll('dt')].map((dt) => dt.textContent);
+    const values = [...progress.querySelectorAll('dd')].map((dd) => dd.textContent);
+    expect(terms).toEqual(['Today', 'Saved', 'Liked']);
+    expect(values).toEqual(['3', '4', '7']);
+  });
+
+  it('leaves the progress box out for guests', () => {
+    render(<FeedSidebar user={null} topicNames={[]} {...handlers} activity={{ watchedToday: '0', saved: 0, liked: 0 }} />);
+    expect(screen.queryByRole('region', { name: 'Your progress' })).toBeNull();
+  });
 });

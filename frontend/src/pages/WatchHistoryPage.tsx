@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { CircleAlert, History, Loader2, Trash2, X } from 'lucide-react';
+import { CalendarDays, CircleAlert, History, Loader2, Play, Star, Trash2, Users, X } from 'lucide-react';
+import { countWatchedToday, formatCapped, groupByDay, topCreators } from '@/lib/activity';
+import StatTile from '@/components/StatTile';
 import { ApiError } from '../api/client';
 import { clearWatchHistory, fetchWatchHistory, removeFromWatchHistory, type WatchedVideo } from '../api/history';
 import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
@@ -132,48 +134,83 @@ export default function WatchHistoryPage({ onOpenVideo, ...navigation }: Props) 
           </span>
           <p className="font-medium">Nothing here yet</p>
           <p className="text-sm text-muted-foreground">Videos you press play on will show up here.</p>
+          <Button size="sm" className="mt-2" onClick={navigation.onBack}>
+            <Play aria-hidden="true" />
+            Start watching
+          </Button>
         </div>
       );
     }
     return (
-      <ol id="watch-history-list" className="divide-y">
-        {videos.map((video) => (
-          <li key={video.youtubeId} className="flex items-center gap-4 px-4 py-3 transition-colors duration-150 hover:bg-muted/40">
-            <img
-              src={`${THUMBNAIL_URL}${encodeURIComponent(video.youtubeId)}/mqdefault.jpg`}
-              alt=""
-              loading="lazy"
-              className="aspect-video w-28 shrink-0 rounded-md border object-cover sm:w-36"
-            />
-            <div className="min-w-0 flex-1">
-              {/* Titles and creators come from YouTube: plain JSX text only. */}
-              <button
-                type="button"
-                className="line-clamp-2 cursor-pointer text-left font-medium underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline"
-                title="Watch in your feed"
-                onClick={() => onOpenVideo(video)}
-              >
-                {video.title}
-              </button>
-              <p className="truncate text-sm text-muted-foreground">{video.creator}</p>
-              <p className="text-xs text-muted-foreground/80">
-                <time dateTime={video.watchedAt}>{timeAgo(video.watchedAt)}</time>
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Remove ${video.title} from your history`}
-              title="Remove from history"
-              onClick={() => void removeVideo(video.youtubeId)}
+      <div id="watch-history-list">
+        {groupByDay(videos).map((group) => (
+          <section key={group.label} aria-labelledby={`history-${group.label}`} className="border-b last:border-b-0">
+            <h2
+              id={`history-${group.label}`}
+              className="bg-muted/40 px-4 py-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase"
             >
-              <X aria-hidden="true" />
-            </Button>
-          </li>
+              {group.label}
+            </h2>
+            <ol className="divide-y">{group.videos.map(renderVideo)}</ol>
+          </section>
         ))}
-      </ol>
+      </div>
     );
   }
+
+  function renderVideo(video: WatchedVideo) {
+    return (
+      <li key={video.youtubeId} className="flex items-center gap-4 px-4 py-3 transition-colors duration-150 hover:bg-muted/40">
+        <img
+          src={`${THUMBNAIL_URL}${encodeURIComponent(video.youtubeId)}/mqdefault.jpg`}
+          alt=""
+          loading="lazy"
+          className="aspect-video w-28 shrink-0 rounded-md border object-cover sm:w-36"
+        />
+        <div className="min-w-0 flex-1">
+          {/* Titles and creators come from YouTube: plain JSX text only. */}
+          <button
+            type="button"
+            className="line-clamp-2 cursor-pointer text-left font-medium underline-offset-4 transition-colors duration-150 hover:text-primary hover:underline"
+            title="Watch in your feed"
+            onClick={() => onOpenVideo(video)}
+          >
+            {video.title}
+          </button>
+          <p className="truncate text-sm text-muted-foreground">{video.creator}</p>
+          <p className="text-xs text-muted-foreground/80">
+            <time dateTime={video.watchedAt}>{timeAgo(video.watchedAt)}</time>
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={`Remove ${video.title} from your history`}
+          title="Remove from history"
+          onClick={() => void removeVideo(video.youtubeId)}
+        >
+          <X aria-hidden="true" />
+        </Button>
+      </li>
+    );
+  }
+
+  const channels = topCreators(videos, 1);
+  const stats =
+    user && !loading && videos.length > 0 ? (
+      <section aria-label="Watch history summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile icon={<Play />} label="Videos watched" value={formatCapped(videos.length, limit ?? 25)} hint="kept in your history" />
+        <StatTile icon={<CalendarDays />} label="Watched today" value={String(countWatchedToday(videos))} />
+        <StatTile icon={<Users />} label="Channels" value={String(new Set(videos.map((video) => video.creator)).size)} hint="different creators" />
+        {/* Channel names come from YouTube: StatTile renders them as plain text. */}
+        <StatTile
+          icon={<Star />}
+          label="Top channel"
+          value={channels[0].creator}
+          hint={`${channels[0].count} ${channels[0].count === 1 ? 'video' : 'videos'}`}
+        />
+      </section>
+    ) : null;
 
   return (
     <PageLayout
@@ -189,6 +226,7 @@ export default function WatchHistoryPage({ onOpenVideo, ...navigation }: Props) 
           {error}
         </Alert>
       )}
+      {stats}
       <Card role="region" aria-label="Watched videos" className="gap-0 overflow-hidden py-0">
         {renderContent()}
       </Card>

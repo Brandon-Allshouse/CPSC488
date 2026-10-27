@@ -13,7 +13,7 @@ import { fetchWatchHistory, recordWatch } from '../api/history';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
 import { addToPlaylist, createPlaylist, fetchMyPlaylists, type Playlist } from '../api/playlists';
 import { fetchSavedVideos, removeSavedVideo, saveVideo } from '../api/savedVideos';
-import FeedPage from './FeedPage';
+import FeedPage, { suggestSubjects } from './FeedPage';
 
 vi.mock('../api/studyNotes', () => ({ fetchStudyNotes: vi.fn().mockResolvedValue([]), saveStudyNote: vi.fn() }));
 
@@ -104,6 +104,7 @@ beforeEach(() => {
   vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
   vi.mocked(saveMyVideoFeedback).mockResolvedValue(undefined);
   vi.mocked(recordWatch).mockReset().mockResolvedValue(undefined);
+  vi.mocked(fetchWatchHistory).mockReset().mockResolvedValue({ videos: [], limit: 25 });
   vi.mocked(fetchMyPlaylists).mockReset().mockResolvedValue([]);
   vi.mocked(addToPlaylist).mockReset().mockResolvedValue(undefined);
   vi.mocked(createPlaylist).mockReset();
@@ -811,5 +812,29 @@ describe('FeedPage', () => {
     const first = container.querySelector('article')!;
     expect(first.id).toBe('video-video000009');
     expect(scrolledTo).toEqual([first]);
+  });
+});
+
+describe('suggestSubjects', () => {
+  const topics = [
+    { id: 1, name: 'Math', parentId: null },
+    { id: 2, name: 'Biology', parentId: null },
+    { id: 3, name: 'History', parentId: null },
+    { id: 4, name: 'Art', parentId: null },
+    { id: 11, name: 'Algebra 2', parentId: 1 },
+  ];
+
+  it('only suggests whole subjects the feed is not built from yet', () => {
+    expect(suggestSubjects(topics, [1], 0).map((topic) => topic.name)).toEqual(['Biology', 'History', 'Art']);
+  });
+
+  it('starts at a different subject depending on the seed, wrapping around', () => {
+    expect(suggestSubjects(topics, [], 2, 3).map((topic) => topic.name)).toEqual(['History', 'Art', 'Math']);
+    // the same seed always gives the same list
+    expect(suggestSubjects(topics, [], 2, 3)).toEqual(suggestSubjects(topics, [], 2, 3));
+  });
+
+  it('suggests nothing when every subject is already picked', () => {
+    expect(suggestSubjects(topics, [1, 2, 3, 4], 7)).toEqual([]);
   });
 });

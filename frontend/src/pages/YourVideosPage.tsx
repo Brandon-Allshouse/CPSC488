@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { BookOpen, Bookmark, CircleAlert, History, ListVideo, Loader2, Plus, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
+import { BookOpen, Bookmark, CircleAlert, Heart, History, ListVideo, Loader2, Plus, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react';
 import { ApiError } from '../api/client';
 import { fetchMyVideoFeedback, type MyVideoFeedback, type SavedVideo } from '../api/feed';
 import type { Playlist } from '../api/playlists';
 import { fetchSavedVideos } from '../api/savedVideos';
+import StatTile from '../components/StatTile';
 import StudyNotebook from '../components/StudyNotebook';
 import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
 import { Alert } from '@/components/ui/alert';
@@ -397,6 +398,15 @@ export default function YourVideosPage({
         )
       }
     >
+      {user && (
+        <section aria-label="Your videos summary" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* A dash until each number has loaded, so a slow request never shows a wrong 0. */}
+          <StatTile icon={<Bookmark />} label="Saved videos" value={savedCount ?? '–'} hint="notebook and playlists" />
+          <StatTile icon={<BookOpen />} label="Study notebook" value={notebookVideos?.length ?? '–'} hint="videos with notes" />
+          <StatTile icon={<ListVideo />} label="Playlists" value={playlists?.length ?? '–'} hint="including Watch later" />
+          <StatTile icon={<Heart />} label="Liked" value={feedback?.likedVideos.length ?? '–'} hint="thumbs up" />
+        </section>
+      )}
       <div role="tablist" aria-label="Your videos" className="flex gap-1 overflow-x-auto border-b">
         {tabs.map(({ key, label, count }) => (
           <button

@@ -6,6 +6,8 @@ import { ApiError } from '../api/client';
 import LoginPage from './LoginPage';
 
 vi.mock('../api/auth', () => ({ login: vi.fn(), register: vi.fn() }));
+// The product panel beside the form loads the subject list; ProductPitch.test.tsx covers it.
+vi.mock('../api/feed', () => ({ fetchTopics: vi.fn().mockResolvedValue([]) }));
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const onAuthenticated = vi.fn();

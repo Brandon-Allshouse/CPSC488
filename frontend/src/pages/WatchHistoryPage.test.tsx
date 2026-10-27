@@ -149,9 +149,46 @@ describe('WatchHistoryPage', () => {
     });
     const { container } = renderPage();
     expect(await screen.findByText('<b>not bold</b>')).toBeTruthy();
-    expect(screen.getByText('<i>Test Channel</i>')).toBeTruthy();
+    // shown twice: on the video and as the top channel
+    expect(screen.getAllByText('<i>Test Channel</i>')).toHaveLength(2);
     expect(container.querySelector('b')).toBeNull();
     expect(container.querySelector('i')).toBeNull();
+  });
+  it('sums up the history at the top', async () => {
+    vi.mocked(fetchWatchHistory).mockResolvedValue({
+      videos: [watched(1), watched(2, { creator: 'Other Channel' }), watched(3)],
+      limit: 25,
+    });
+    renderPage();
+    const summary = await screen.findByRole('region', { name: 'Watch history summary' });
+
+    expect(summary.textContent).toContain('Videos watched3');
+    expect(summary.textContent).toContain('Channels2');
+    expect(summary.textContent).toContain('Top channelTest Channel2 videos');
+  });
+
+  it('says 25+ when the history is full, since older ones were dropped', async () => {
+    vi.mocked(fetchWatchHistory).mockResolvedValue({ videos: Array.from({ length: 25 }, (_, i) => watched(i + 1)), limit: 25 });
+    renderPage();
+    const summary = await screen.findByRole('region', { name: 'Watch history summary' });
+    expect(summary.textContent).toContain('Videos watched25+');
+  });
+
+  it('groups videos by when they were watched', async () => {
+    const lastMonth = new Date(Date.now() - 40 * 86_400_000).toISOString();
+    vi.mocked(fetchWatchHistory).mockResolvedValue({ videos: [watched(1), watched(2, { watchedAt: lastMonth })], limit: 25 });
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Older' })).toBeTruthy();
+  });
+
+  it('has a button back to the feed when the history is empty', async () => {
+    vi.mocked(fetchWatchHistory).mockResolvedValue({ videos: [], limit: 25 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start watching' }));
+    expect(handlers.onBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('region', { name: 'Watch history summary' })).toBeNull();
   });
 });
 

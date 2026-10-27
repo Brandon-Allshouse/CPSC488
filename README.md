@@ -190,7 +190,7 @@ the vulnerability database, which takes a while; later runs reuse it.
 - Backend tests use JUnit and live in `backend/src/test/java`, in the same package as the class
   they test (for example, `feed/FeedControllerTest.java`). Unit tests don't use the database or
   call YouTube. Keep logic that's worth testing in small methods, like
-  `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`). The endpoints
+  `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`). There's no mocking library; for Javalin's `Context`, a `java.lang.reflect.Proxy` stand-in is enough (see `RequestBodiesTest`). The endpoints
   and SQL will be covered by API tests that run against a real database; those haven't been added yet.
 - Frontend tests use [Vitest](https://vitest.dev) and sit next to the file they test
   (`FeedPage.tsx` → `FeedPage.test.tsx`). Component tests start with `// @vitest-environment jsdom`
@@ -248,7 +248,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | `port is already allocated` (5432, 7070 or 5173) | Something else is using that port. For 5432 it's usually a separately installed PostgreSQL: stop it in the Services app (`postgresql-x64-…`). For 7070/5173, close any backend or `npm run dev` you started outside Docker. |
 | Login page shows `Request failed (500)`, and frontend logs show `ECONNREFUSED` | The backend isn't running or crashed. Look for the error in the `backend-1` lines, or run `docker compose logs backend`. |
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
-| `Too many failed login attempts` while testing | The limits are kept in memory. Run `docker compose restart backend`. |
+| `Too many failed login attempts` while testing | 10 wrong passwords in 15 minutes blocks your IP (see `LoginThrottle`). The limits are kept in memory, so run `docker compose restart backend`. |
 | Sign-up hangs a few seconds with no internet | The breached-password check is timing out. Set `PASSWORD_BREACH_CHECK=false` in `.env` while offline, and restart. |
 | http://localhost:5050 (pgAdmin) won't load | pgAdmin doesn't start with a plain `docker compose up`. Run `docker compose --profile tools up -d pgadmin` and wait about 20 seconds. If it still won't load, `docker compose logs pgadmin` says why (usually `PGADMIN_PASSWORD` is blank in `.env`). |
 
@@ -309,6 +309,24 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **The feed's side columns** show on wide screens only. The left one has the same links as the
   Profile menu plus the topics the feed is built from. The right one ("Up next", 1280px and wider)
   lists the next five videos (click one to jump to it) and the keyboard shortcuts.
+- **Your progress** (left column, signed-in users): videos watched today, saved videos and liked
+  videos. "Today" comes from the watch history, which only keeps 25 videos, so it shows "25+" when
+  the history is full. Built in `lib/activity.ts`; there's no stats endpoint yet.
+- **Explore more subjects** (under "Up next"): up to four subjects the feed isn't built from yet.
+  "Add" saves it to your interests (in the browser only for guests) and the feed starts over with
+  it mixed in. Which four you see changes each visit (`suggestSubjects` in `FeedPage.tsx`).
+- **Under each video:** "YouTube" opens the video on youtube.com in a new tab, and "Copy link"
+  copies that link. Copying needs https or localhost; otherwise the button says "Couldn't copy".
+- **Summary tiles** at the top of Watch history (videos watched, today, channels, top channel) and
+  Your videos (saved, study notebook, playlists, liked) use the `StatTile` component. Watch history
+  is also grouped into Today, Yesterday, This week and Older.
+- **Login page:** on screens 1024px and wider, a panel next to the form says what BrainFeed does
+  (`ProductPitch.tsx`). It lists only features that exist, and its subject counts come from
+  `/api/topics`, so they're always real. Add features to it as they ship, not before.
+- **Interests page:** the search box filters subjects and sub-subjects as you type and opens the
+  subjects that match. Picks made before searching are kept.
+- **Leaderboard:** still a placeholder, but it now explains how scoring will work. It never shows
+  example rankings, so nobody mistakes them for real people.
 - **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
   Escape or a click outside it.
 
