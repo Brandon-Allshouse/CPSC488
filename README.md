@@ -308,7 +308,7 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
   Saved tab of "Your videos".
 - **The feed's side columns** show on wide screens only. The left one has the same links as the
   Profile menu plus the topics the feed is built from. The right one ("Up next", 1280px and wider)
-  lists the next five videos (click one to jump to it) and the keyboard shortcuts.
+  lists the next five videos (click one to jump to it). ↓/J and ↑/K still move through the feed.
 - **Your progress** (left column, signed-in users): videos watched today, saved videos and liked
   videos. "Today" comes from the watch history, which only keeps 25 videos, so it shows "25+" when
   the history is full. Built in `lib/activity.ts`; there's no stats endpoint yet.

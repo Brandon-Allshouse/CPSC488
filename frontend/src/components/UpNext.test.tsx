@@ -74,10 +74,4 @@ describe('UpNext', () => {
     render(<UpNext videos={videos} currentIndex={0} loading={false} onSelect={vi.fn()} suggestions={[]} onAddTopic={vi.fn()} />);
     expect(screen.queryByRole('heading', { name: 'Explore more subjects' })).toBeNull();
   });
-
-  it('lists the keyboard shortcuts', () => {
-    render(<UpNext videos={[]} currentIndex={0} loading={false} onSelect={vi.fn()} />);
-    expect(screen.getByText('Next video')).toBeTruthy();
-    expect(screen.getByText('Previous video')).toBeTruthy();
-  });
 });
