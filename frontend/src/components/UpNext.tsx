@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Compass, Keyboard, Loader2, Plus } from 'lucide-react';
+import { Compass, Loader2, Plus } from 'lucide-react';
 import type { FeedVideo, Topic } from '../api/feed';
 import { Button } from '@/components/ui/button';
 
@@ -22,7 +22,7 @@ interface Props {
 }
 
 // The right column on wide screens: the next few videos in the feed, so there's always something
-// to look forward to, and the keyboard shortcuts. Hidden on smaller screens.
+// to look forward to. Hidden on smaller screens.
 export default function UpNext({ videos, currentIndex, loading, onSelect, suggestions = [], onAddTopic }: Props) {
   const [adding, setAdding] = useState<number | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
@@ -129,23 +129,6 @@ export default function UpNext({ videos, currentIndex, loading, onSelect, sugges
           )}
         </section>
       )}
-
-      <section className="mt-auto flex flex-col gap-2 rounded-xl border bg-background p-4 text-sm" aria-labelledby="shortcuts-title">
-        <h2 id="shortcuts-title" className="flex items-center gap-2 font-semibold">
-          <Keyboard aria-hidden="true" className="size-4 text-muted-foreground" />
-          Shortcuts
-        </h2>
-        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-muted-foreground">
-          <dt><Key>J</Key> <Key>↓</Key></dt>
-          <dd>Next video</dd>
-          <dt><Key>K</Key> <Key>↑</Key></dt>
-          <dd>Previous video</dd>
-        </dl>
-      </section>
     </aside>
   );
-}
-
-function Key({ children }: { children: string }) {
-  return <kbd className="inline-flex min-w-6 justify-center rounded border bg-muted px-1.5 py-0.5 font-sans text-xs font-medium text-foreground">{children}</kbd>;
 }
