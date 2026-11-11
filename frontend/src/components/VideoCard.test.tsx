@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Video, VideoFeedback } from '../api/feed';
 import { scrollInto, useFakeIntersectionObserver } from '../test/fakeIntersectionObserver';
+import { fetchVideoStudy } from '../api/study';
 import VideoCard, { videoCardId } from './VideoCard';
+
+vi.mock('../api/study', () => ({ fetchVideoStudy: vi.fn().mockResolvedValue({ status: 'pending' }) }));
 
 const video: Video = {
   youtubeId: 'dQw4w9WgXcQ',
@@ -203,6 +206,14 @@ describe('VideoCard', () => {
     rerender(<VideoCard video={video} feedback={null} onFeedbackChange={onFeedbackChange} highlighted />);
     expect(article.getAttribute('data-highlighted')).toBe('true');
     expect(container.querySelector('.video-frame')!.classList.contains('ring-primary')).toBe(true);
+  });
+
+  it('starts writing the summary when play is pressed, not when the card shows up', async () => {
+    renderVideoCard();
+    expect(fetchVideoStudy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Play: How Plants Grow' }));
+    await waitFor(() => expect(fetchVideoStudy).toHaveBeenCalledWith('dQw4w9WgXcQ'));
+    expect(await screen.findByText(/Writing a summary and quiz/)).toBeTruthy();
   });
 
   it('tells the feed when play is pressed, so it can go in the watch history', () => {

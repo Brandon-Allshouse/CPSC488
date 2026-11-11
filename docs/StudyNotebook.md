@@ -53,7 +53,9 @@ docker compose logs --tail=60 backend
 
 The backend restart applies V11 automatically. Do not reset the database volume for this feature.
 Controller tests make real HTTP/JSON requests against a repository test double. They test login
-requirements, input rules and controller ownership behavior; they do not test live PostgreSQL.
+requirements, input rules and controller ownership behavior. The repositories' SQL (owner checks,
+the 500-video limit under parallel saves, notes cascading with their video) is tested against a
+real PostgreSQL in `saved/SavedRepositoriesTest.java` (see "Writing tests" in the README).
 
 Verify the complete flow in the running app:
 

@@ -33,7 +33,8 @@ public class FeedController {
     static final int PAGE_SIZE = 10;
     // way more than anyone will scroll, and stops requests for page 1,000,000
     static final int MAX_PAGE = 100;
-    // there are about 120 topics (subjects plus sub-subjects), so anything past this is junk
+    // Nobody picks 200 topics: "Select all subjects" sends the subjects only (at most 40, see
+    // TopicSuggestions.LIMITS), so anything past this is junk.
     static final int MAX_TOPICS_PER_REQUEST = 200;
 
     record InterestsRequest(List<Integer> topicIds) {

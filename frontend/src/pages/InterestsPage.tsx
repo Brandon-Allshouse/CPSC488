@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
-import { Check, ChevronRight, CircleAlert, Search } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, Search, Sparkles } from 'lucide-react';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import LanguageSelect from '@/components/LanguageSelect';
+import TopicFinder from '@/components/TopicFinder';
 
 interface Props {
   /** Topic ids that start out selected. */
@@ -21,8 +22,10 @@ interface Props {
 export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Props) {
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(() => new Set(initial));
-  // Only decided once, so sections the user opens or closes stay that way while they pick.
-  const [startOpen] = useState(() => new Set(initial));
+  // Sections that start open: ones with an earlier pick, plus the section of any topic added with
+  // AI, so the user can see it there. Only ever grows, so sections the user opens or closes stay
+  // that way while they pick.
+  const [startOpen, setStartOpen] = useState(() => new Set(initial));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -43,6 +46,18 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
       }
       return next;
     });
+  }
+
+  // A topic added with the AI finder: put it (and its new subject) in the list and pick it.
+  function addTopics(added: Topic[]) {
+    if (added.length === 0) return;
+    setTopics((current) => {
+      const known = new Set((current ?? []).map((topic) => topic.id));
+      return [...(current ?? []), ...added.filter((topic) => !known.has(topic.id))];
+    });
+    const picked = added[added.length - 1];
+    setSelected((current) => new Set(current).add(picked.id));
+    setStartOpen((current) => new Set(current).add(picked.id));
   }
 
   // Picking a subject already includes all of its sub-subjects (see VideoRepository.page), so
@@ -100,6 +115,14 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
             {allSelected ? 'Clear all' : 'Select all subjects'}
           </Button>
         </div>
+      )}
+
+      {topics && !isGuest && <TopicFinder selected={selected} onToggle={toggle} onAdded={addTopics} />}
+      {topics && isGuest && (
+        <p className="topic-finder-guest flex items-center gap-2 text-sm text-muted-foreground">
+          <Sparkles aria-hidden="true" className="size-4 text-primary" />
+          Log in to find topics with AI and add ones we don't have yet.
+        </p>
       )}
 
       {topics && (
@@ -173,6 +196,12 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
                         >
                           {isPicked && <Check aria-hidden="true" className="size-3.5" />}
                           {topic === subject ? `All of ${subject.name}` : topic.name}
+                          {topic.ai && (
+                            <>
+                              <Sparkles aria-hidden="true" className="size-3 text-muted-foreground" />
+                              <span className="sr-only">, added with AI</span>
+                            </>
+                          )}
                         </button>
                       );
                     })}

@@ -51,6 +51,8 @@ public class AdminController {
         routes.put("/api/admin/banned-videos/{youtubeId}", this::handleBanVideo);
         routes.delete("/api/admin/banned-videos/{youtubeId}", this::handleUnbanVideo);
         routes.get("/api/admin/actions", this::handleActions);
+        routes.get("/api/admin/topics", this::handleAiTopics);
+        routes.delete("/api/admin/topics/{id}", this::handleRemoveTopic);
     }
 
     /** 401 if not logged in, 403 if logged in but not an admin. Failed attempts are logged. */
@@ -149,6 +151,23 @@ public class AdminController {
         ctx.status(204);
     }
 
+    private void handleAiTopics(Context ctx) {
+        admin(ctx);
+        ctx.json(Map.of("topics", admins.aiTopics(LIST_LIMIT)));
+    }
+
+    /** DELETE /api/admin/topics/{id} with { reason }: removes an AI-added topic and blocks its name. */
+    private void handleRemoveTopic(Context ctx) {
+        User admin = admin(ctx);
+        int topicId = parseTopicId(ctx.pathParam("id"));
+        String reason = checkReason(RequestBodies.parse(ctx, BanRequest.class).reason());
+        if (!admins.removeAiTopic(admin.id(), ctx.ip(), topicId, reason)) {
+            throw ApiException.notFound("No AI-added topic with that id. Seeded topics can't be removed here.");
+        }
+        SecurityLog.success("admin_remove_topic", ctx, admin.id(), "target=" + topicId);
+        ctx.status(204);
+    }
+
     private void handleActions(Context ctx) {
         admin(ctx);
         ctx.json(Map.of("actions", admins.recentActions(SEARCH_LIMIT)));
@@ -177,6 +196,18 @@ public class AdminController {
             throw ApiException.badRequest("Reason must be at most " + MAX_REASON + " characters on one line.");
         }
         return trimmed;
+    }
+
+    static int parseTopicId(String id) {
+        try {
+            int value = Integer.parseInt(id);
+            if (value > 0) {
+                return value;
+            }
+        } catch (NumberFormatException e) {
+            // falls through to the error below
+        }
+        throw ApiException.badRequest("Invalid topic id.");
     }
 
     static long parseUserId(String id) {

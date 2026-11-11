@@ -30,7 +30,11 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Preferences and history saved for registered users: a private watch history of the last 25 videos
   you pressed play on
 - A random/discovery feed to branch out into new topics
-- Admin page: ban users, blacklist videos, and see a log of every admin action
+- A short summary and a 2-question quiz under every video, written by a free AI model that runs on
+  your own laptop (no API key, no cost)
+- Find topics with AI: type a few keywords or examples ("black holes", "like the Cold War") and pick
+  from matching topics, or add new ones we don't have yet (signed-in users)
+- Admin page: ban users, blacklist videos, remove topics added with AI, and see a log of every admin action
 
 ## Stack (subject to change)
 
@@ -38,16 +42,20 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - **Frontend:** React 19 + TypeScript, built with Vite (Node 24), styled with Tailwind CSS 4 and shadcn/ui components, tested with Vitest
 - **Database:** PostgreSQL 18. The schema is managed by Flyway migrations in `backend/src/main/resources/db/migration`
 - **Local development:** Docker Compose runs all of the above, so the only tools you need are Docker Desktop and Git
-- **External services:** YouTube Data API, plus an LLM API for content classification (and later, generation)
+- **External services:** YouTube Data API
+- **LLM:** [Ollama](https://ollama.com) running the free, open `gemma4:e4b` model (Apache 2.0) in its
+  own container, for video summaries and quizzes. It runs on your CPU, so there's no API key and no bill
 
 ```
 Browser ──▶ React frontend (localhost:5173) ──/api──▶ Javalin backend (localhost:7070) ──▶ PostgreSQL (localhost:5432)
+                                                              └──────▶ Ollama (no port, Docker only)
 ```
 
-The frontend never talks to the database. Postgres only accepts connections from your own machine, and
-only the backend has its password. Docker enforces this too: the database and backend share one
-network (`data`) and the backend and frontend share another (`web`), so the frontend container
-can't even reach the database. Keep new frontend code going through `/api`.
+The frontend never talks to the database or the LLM. Postgres only accepts connections from your own
+machine, and only the backend has its password. Docker enforces this too: the database and backend
+share one network (`data`), the backend and frontend share another (`web`), and the backend and
+Ollama share a third (`llm`), so the frontend container can't reach the database or Ollama. Keep new
+frontend code going through `/api`.
 
 ## Project layout
 
@@ -58,6 +66,9 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/java/.../feed/       topics, interests, video feed, YouTube client
   src/main/java/.../admin/      admin page endpoints: user bans, video blacklist, admin action log
   src/main/java/.../history/    watch history: the last 25 videos each user pressed play on
+  src/main/java/.../llm/        the Ollama client and the cleaning used on text going to and from the model
+  src/main/java/.../study/      video summaries and quizzes: prompt, output checks and work queue
+  src/main/java/.../topics/     the AI topic finder: prompt, output checks, limits and adding topics
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
@@ -68,6 +79,8 @@ frontend/                     React app (Vite project)
                                 FeedSidebar and UpNext (the feed's left and right columns on wide screens),
                                 ThemeToggle (light/dark switch),
                                 SaveMenu (a video's bookmark button and "Save to…" playlist menu),
+                                StudyBox (a video's summary and quiz),
+                                TopicFinder ("Find topics with AI" on the interests page),
                                 LanguageSelect (language picker on the interests page; UI only for now)
   src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
@@ -76,7 +89,6 @@ frontend/                     React app (Vite project)
 docker-compose.yml            runs the whole app locally: database, backend, frontend
 .env.example                  template for your local settings and secrets
 SECURITY.md                   security requirements. Read before touching auth code
-PRESENTATION.md               how to demo the project, and which code to show
 pgadmin/servers.json          sets up the optional database GUI (see "Looking at the database")
 ```
 
@@ -142,8 +154,13 @@ docker compose up --build
 ```
 
 The first run downloads everything and takes several minutes; later runs take seconds. The logs of
-all three parts (`db-1`, `backend-1`, `frontend-1`) appear in this window. When the frontend
-prints `Local: http://localhost:5173/`, open **http://localhost:5173** in your browser.
+every part (`db-1`, `backend-1`, `frontend-1`, `ollama-1`, ...) appear in this window. When the
+frontend prints `Local: http://localhost:5173/`, open **http://localhost:5173** in your browser.
+
+The first run also downloads the AI model for video summaries (about 6.6 GB, once). The app works
+while that happens; summaries just say the writer isn't running until `ollama-pull-1` prints
+`success` and exits. It needs about 4 GB of free RAM while it's writing (see "Video summaries and
+quizzes" below).
 
 New passwords must be at least 15 characters; a few random words works well.
 
@@ -172,7 +189,7 @@ docker compose down -v               # ERASES the local database and cached pack
 ### Tests and checks
 
 ```powershell
-docker compose run --rm backend-tests                                   # backend unit tests
+docker compose run --rm backend-tests                                   # backend tests (starts the database if needed)
 docker compose run --rm backend-tests mvn -B verify -P security-scan    # scan Java libraries for known vulnerabilities (slow the first time)
 docker compose exec frontend npm test                                   # frontend unit tests (app must be running)
 docker compose exec frontend npm test -- src/pages/FeedPage.test.tsx   # run one frontend test file
@@ -185,13 +202,27 @@ Run frontend tests with Vitest, not `node` directly: Node does not execute `.ts`
 The security scan needs a free `NVD_API_KEY` in `.env` (see `.env.example`). The first run downloads
 the vulnerability database, which takes a while; later runs reuse it.
 
-**Writing tests.** Every new class or component should come with unit tests.
+**Writing tests.** Every new class or component should come with tests.
 
 - Backend tests use JUnit and live in `backend/src/test/java`, in the same package as the class
-  they test (for example, `feed/FeedControllerTest.java`). Unit tests don't use the database or
-  call YouTube. Keep logic that's worth testing in small methods, like
-  `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`). There's no mocking library; for Javalin's `Context`, a `java.lang.reflect.Proxy` stand-in is enough (see `RequestBodiesTest`). The endpoints
-  and SQL will be covered by API tests that run against a real database; those haven't been added yet.
+  they test (for example, `feed/FeedControllerTest.java`). They never call YouTube or Ollama. There
+  are three kinds:
+  - **Plain unit tests** for logic. Keep logic that's worth testing in small methods, like
+    `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`,
+    `TopicSuggestionsTest`). There's no mocking library; for Javalin's `Context`, a
+    `java.lang.reflect.Proxy` stand-in is enough (see `RequestBodiesTest`).
+  - **Database tests** for every repository class (`*RepositoryTest`). They run our real SQL
+    against Postgres through `db/TestDatabase`, which uses its own `brainfeed_test` database
+    (dropped and recreated each run, so your real data is never touched). Call
+    `TestDatabase.reset()` in `@BeforeEach`. Use them for anything the database decides: only your
+    own rows coming back, limits holding under parallel requests, cascades and `CHECK`s.
+  - **API tests** over real HTTP, with `ApiServer`, which sets up routes exactly like production
+    (`App.configure`: security headers, CSRF check, strict JSON). See `AuthApiTest` and
+    `WatchHistoryControllerTest`. When you add an `/api/me` or `/api/admin` route, add it to the
+    lists in `AccessControlTest`, which checks guests get 401 and non-admins get 403 everywhere.
+
+  `docker compose run --rm backend-tests` and CI run all three. Run from an IDE without
+  `TEST_DB_URL` set, the database tests are skipped.
 - Frontend tests use [Vitest](https://vitest.dev) and sit next to the file they test
   (`FeedPage.tsx` → `FeedPage.test.tsx`). Component tests start with `// @vitest-environment jsdom`
   and use React Testing Library. They mock the `api/` modules so no backend is needed.
@@ -249,6 +280,10 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Login page shows `Request failed (500)`, and frontend logs show `ECONNREFUSED` | The backend isn't running or crashed. Look for the error in the `backend-1` lines, or run `docker compose logs backend`. |
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
 | `Too many failed login attempts` while testing | 10 wrong passwords in 15 minutes blocks your IP (see `LoginThrottle`). The limits are kept in memory, so run `docker compose restart backend`. |
+| Video Summary says "The summary writer isn't running right now" | Right after the first `docker compose up`, the model is still downloading: wait for `ollama-pull-1` to print `success`. Otherwise run `docker compose logs ollama ollama-pull` and `docker compose logs backend` (look for `Study material paused`). If the model is missing, `docker compose up -d ollama-pull` downloads it again. |
+| "Find topics with AI" says the finder isn't running | Same cause as the row above: Ollama is down or the model is still downloading. Picking from the list still works. |
+| `docker compose run --rm backend-tests` fails with `Couldn't create the test database` | The database tests need the `db` service. Run `docker compose up -d db` and try again. If `DB_PASSWORD` changed since the database was created, see the `password authentication failed` row. |
+| Summaries are very slow, or Docker runs out of memory | The model runs on the CPU and needs about 4 GB of free RAM. Close other heavy apps, and in Docker Desktop → Settings → Resources give it at least 8 GB. The first summary after 30 idle minutes is slower because the model has to load again. |
 | Sign-up hangs a few seconds with no internet | The breached-password check is timing out. Set `PASSWORD_BREACH_CHECK=false` in `.env` while offline, and restart. |
 | http://localhost:5050 (pgAdmin) won't load | pgAdmin doesn't start with a plain `docker compose up`. Run `docker compose --profile tools up -d pgadmin` and wait about 20 seconds. If it still won't load, `docker compose logs pgadmin` says why (usually `PGADMIN_PASSWORD` is blank in `.env`). |
 
@@ -315,6 +350,11 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **Explore more subjects** (under "Up next"): up to four subjects the feed isn't built from yet.
   "Add" saves it to your interests (in the browser only for guests) and the feed starts over with
   it mixed in. Which four you see changes each visit (`suggestSubjects` in `FeedPage.tsx`).
+- **Video Summary** (under each video): pressing play, or "Summarize and quiz me", asks for the
+  video's summary and 2 quiz questions. The first time anyone asks for a video it takes 10-60
+  seconds while the model writes it; after that it's saved and shows up instantly for everyone.
+  Picking an answer shows whether it's right and why; "Retake" clears the answers. Built in
+  `StudyBox.tsx`. Quiz answers aren't saved anywhere yet.
 - **Under each video:** "YouTube" opens the video on youtube.com in a new tab, and "Copy link"
   copies that link. Copying needs https or localhost; otherwise the button says "Couldn't copy".
 - **Summary tiles** at the top of Watch history (videos watched, today, channels, top channel) and
@@ -323,6 +363,16 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **Login page:** on screens 1024px and wider, a panel next to the form says what BrainFeed does
   (`ProductPitch.tsx`). It lists only features that exist, and its subject counts come from
   `/api/topics`, so they're always real. Add features to it as they ship, not before.
+- **Find topics with AI** (interests page, signed-in users): type a few keywords or examples and
+  press "Find topics". In a few seconds it shows topics we already have that fit ("Already on
+  BrainFeed", click to pick) and new topics it suggests ("Add" puts it in the catalog for everyone,
+  picks it for you, and opens its subject so you can see it). Topics added this way have a small
+  sparkle next to their name. Built in `TopicFinder.tsx`; guests see a line asking them to log in.
+  Naming a specific exam, certification or course works too: "security+ certification" gives
+  "CompTIA Security+", whose videos are searched as "CompTIA Security+ exam prep". The model is told
+  to keep the exact thing asked for and only add broader topics after it (`TopicPrompt.SYSTEM`).
+  After changing that prompt, try a few requests against the running app; the unit tests can't
+  check what the model actually answers.
 - **Interests page:** the search box filters subjects and sub-subjects as you type and opens the
   subjects that match. Picks made before searching are kept.
 - **Leaderboard:** still a placeholder, but it now explains how scoring will work. It never shows
@@ -464,7 +514,7 @@ Then start your next change from step 1.
 Settings are read from `.env` in the repo root, and real environment variables override it.
 Every setting is described in [`.env.example`](.env.example): `DB_USER`, `DB_PASSWORD`, `DB_URL`,
 `PASSWORD_PEPPER`, `PASSWORD_BREACH_CHECK`, `COOKIE_SECURE`, `ALLOWED_ORIGINS`, `TRUSTED_PROXIES`, `PORT`,
-`YOUTUBE_API_KEY`, `NVD_API_KEY`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
+`YOUTUBE_API_KEY`, `OLLAMA_URL`, `OLLAMA_MODEL`, `NVD_API_KEY`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`.
 
 **Users' IP addresses.** Browsers reach the backend through a proxy (Vite in development), so the
 backend learns each user's real IP from the proxy's `X-Forwarded-For` header, and only believes
@@ -500,6 +550,35 @@ so restarting doesn't reset it or fetch again. After a YouTube error (usually th
 key), new-topic fetching pauses for 15 minutes. If the budget is used up, the feed says there are
 no videos yet, and they get fetched the next day.
 
+### Video summaries and quizzes
+
+Summaries and quizzes (and the AI topic finder) use a free, open model running in the `ollama`
+container, on your own CPU. There's nothing to sign up for and no API key. `docker compose up` starts it, and
+`ollama-pull` downloads the model the first time.
+
+- **What it reads:** the video's title, channel, topic and YouTube description (one extra YouTube
+  call, 1 quota unit). It can't watch or hear the video, so the summary is only as good as the
+  description, which is why the box says it was written by AI and can get things wrong.
+- **When it runs:** only when someone presses play or "Summarize and quiz me", never while
+  scrolling. One video at a time; each takes about 10-60 seconds depending on the laptop. Each video
+  is written once, saved in `video_study`, and shared by everyone.
+- **Limits:** at most 20 videos waiting and 500 written per 24 hours (counted in the database). If
+  the model's answer fails our checks it gets one more try; a video that fails twice is skipped for
+  6 hours. If Ollama is down, new requests pause for a minute.
+- **Changing the model:** set `OLLAMA_MODEL` in `.env`, then `docker compose up -d ollama-pull` and
+  `docker compose restart backend`. Models already written keep their old summary (the
+  `video_study.model` column says which model wrote it); to redo them, delete those rows in psql.
+  We tested two on the same six real videos (both Apache 2.0, both free), about 15-20 seconds a
+  video each on a 24-core laptop with no GPU:
+
+  | Model | Download | RAM while writing | What we saw |
+  |---|---|---|---|
+  | `gemma4:e4b` (default) | 6.6 GB | ~2 GB | Sticks to the description and didn't make up facts. A few questions are easy ones about what the video covers |
+  | `qwen3:4b` | 2.5 GB | ~3 GB | Harder, more interesting questions, but it made up a fact (and a quiz question about it) and sometimes garbles numbers ("1,70.0 years") |
+
+- **Removing downloaded models** to free disk space: `docker volume rm brainfeed_ollama-models`
+  (after `docker compose down`). The next `up` downloads the model again.
+
 ### Looking at the database
 
 The database only accepts connections from your own laptop, and the app (or at least
@@ -532,8 +611,18 @@ docker compose exec db sh -c 'psql -U $POSTGRES_USER -d brainfeed'
 
 Type SQL at the `brainfeed=#` prompt (`\dt` lists the tables, `\q` quits). Open the prompt first
 and then type queries. Don't pass a query with `-c "..."`, because Windows PowerShell strips the
-inner quotes. [PRESENTATION.md](PRESENTATION.md#appendix-looking-inside-the-database-yourself) has a
-list of useful queries.
+inner quotes. Some useful queries:
+
+```sql
+SELECT id, username, email, is_admin, banned_at FROM users ORDER BY id;      -- accounts
+SELECT name, source FROM topics WHERE source = 'ai' ORDER BY created_at;      -- topics added with AI
+SELECT t.name, count(*) FROM videos v JOIN topics t ON t.id = v.topic_id
+GROUP BY t.name ORDER BY count(*) DESC LIMIT 10;                             -- topics with the most videos
+SELECT youtube_id, summary, model FROM video_study LIMIT 5;                   -- AI summaries
+```
+
+The tests use a separate `brainfeed_test` database on the same server; leave it alone, it's
+recreated every test run.
 
 Stick to looking. If you change data by hand and break something, `docker compose down -v` resets
 the local database (and erases everything in it).
@@ -558,7 +647,7 @@ too many attempts. Every POST and PUT must send `Content-Type: application/json`
 
 | Method | Path                | Body / query                       | Success response                                         |
 |--------|---------------------|------------------------------------|----------------------------------------------------------|
-| GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name, parentId }] }`               |
+| GET    | `/api/topics`       | none                               | `200 { topics: [{ id, name, parentId, ai }] }`           |
 | GET    | `/api/me/interests` | none (login required)              | `200 { topicIds }`, empty if none picked yet             |
 | PUT    | `/api/me/interests` | `{ topicIds }` (login required)    | `200 { topicIds }`; replaces all of the user's interests |
 | GET    | `/api/me/video-feedback` | none (login required)         | `200 { likedVideos, dislikedVideos }`                    |
@@ -569,7 +658,8 @@ too many attempts. Every POST and PUT must send `Content-Type: application/json`
 Topics come in two levels. A subject (Math) has `parentId: null`; a sub-subject (Algebra 2) has its
 subject's id. Asking for a subject's id in `/api/feed` or saving it as an interest includes all
 of its sub-subjects. The list comes back with subjects first (A to Z), then sub-subjects in the
-order they're usually learned. To add one, insert a row in a new migration (see
+order they're usually learned. `ai` is true for topics a user added with the AI topic finder (see
+"Topic finder API"). To add a seeded topic, insert a row in a new migration (see
 `V4__subjects_and_subtopics.sql`).
 
 The topic list and feed are public, so guests can use them; guests' interests stay in the browser.
@@ -632,6 +722,48 @@ and manual test steps are in [docs/StudyNotebook.md](docs/StudyNotebook.md).
 | GET    | `/api/me/study-notes`                 | none       | `200 { notes: [{ youtubeId, note, updatedAt }] }`, newest edit first   |
 | PUT    | `/api/me/study-notes/{youtubeId}`     | `{ note }` | `200 { note }`; an empty note clears the text. `400` if over 2,000 characters, `404` if the video isn't in their notebook |
 
+## Study API
+
+A video's summary and quiz. Public like the feed, so guests get them too.
+
+| Method | Path                              | Body | Success response |
+|--------|-----------------------------------|------|------------------|
+| GET    | `/api/videos/{youtubeId}/study`   | none | `200 { status, summary?, questions? }`. `400` for an invalid id, `404` if the video isn't in our database |
+
+`status` is one of:
+
+- `ready`: `summary` (a string) and `questions` (1-3 of `{ question, options, answerIndex, explanation }`,
+  where `options` has 4 strings and `answerIndex` is 0-3) are included.
+- `pending`: it's being written. The first request for a video starts this. Ask again in a few seconds.
+- `busy`: 20 videos are already waiting. Ask again in a minute.
+- `unavailable`: Ollama is off or down, the daily limit is used up, or the model failed on this
+  video recently.
+
+All of it was written by the LLM, so the frontend shows it as plain text only. The answer is in the
+response because nothing is scored yet; when progress tracking adds scores, checking answers has to
+move to the backend (see SECURITY.md).
+
+## Topic finder API
+
+The AI topic finder on the interests page. Both endpoints need a login (`401` otherwise).
+
+| Method | Path                         | Body       | Success response |
+|--------|------------------------------|------------|------------------|
+| POST   | `/api/me/topic-suggestions`  | `{ text }` | `200 { matches, ideas }`. `400` if `text` is empty, has no letters or digits, or is over 200 characters. `429` past 10 requests an hour per account (30 per IP) or when the model is busy for a minute. `503` if Ollama is off or down |
+| POST   | `/api/me/topics`             | `{ key }`  | `201 { topics }` when added, `200 { topics }` if it already existed. `404` for an unknown or expired key. `429` past 10 new topics a day per account or 200 a day overall. `409` if the name was removed by an admin or the catalog is full |
+
+`matches` are topics already in the catalog (`{ id, name, parentId, ai }`). `ideas` are new topics
+the model suggested: `{ key, name, subject, newSubject }`, where `newSubject` means the subject is
+new too and gets added with it. To add one, send its `key` back. `topics` is what to pick: the new
+subject first (when one was made), then the topic.
+
+Keys are random, belong to the account that asked, can be used once, and expire after 30
+minutes; asking again replaces them. That way the only topic names that can ever be added are ones
+the model suggested and the backend checked; a client can't send a name of its own. Names are 1-40
+characters (subjects 1-30) of letters, digits, spaces and `& ' . , + # ( ) / : -`, start with a
+letter or digit, and are unique ignoring case. There can be at most 40 subjects and 2,000 topics.
+AI-added topics nobody has picked aren't refreshed from YouTube, so they can't use up the quota.
+
 ## Admin API
 
 Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the user isn't an admin.
@@ -646,7 +778,9 @@ Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the use
 | GET    | `/api/admin/banned-videos`              | none              | `200 { videos }`, newest ban first                                   |
 | PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
 | DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
-| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans and unbans, with the admin's IP |
+| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans, unbans and topic removals, with the admin's IP |
+| GET    | `/api/admin/topics`                     | none              | `200 { topics }`, AI-added topics, newest first: `{ id, name, subject, addedBy, createdAt, picks }` |
+| DELETE | `/api/admin/topics/{id}`                | `{ reason }`      | `204`; removes an AI-added topic (a subject takes its topics with it), its videos, and blocks the name. `404` for seeded topics |
 
 A user in `users` is `{ id, username, email, createdAt, admin, bannedAt, banReason, signupIp,
 lastLoginIp, lastLoginAt }`. The IPs are `null` for accounts from before IPs were recorded, and
@@ -679,13 +813,16 @@ accounts, sessions, input handling or the database.**
 This is a class project, so scope is going to move around as we go. Rough direction:
 
 1. **Done:** accounts/guest mode, interest selection, YouTube feed
-2. **Now:** subjects and sub-subjects (Math → Algebra 2) covering the major areas of learning
-3. **Next:** save thumbs up/down and use it in the feed (hide disliked videos, show less from disliked channels)
-4. **Then:** the Duolingo side: LLM-generated summaries and quiz questions after videos, then progress
-   tracking (streaks, reviewing missed questions)
+2. **Done:** subjects and sub-subjects (Math → Algebra 2) covering the major areas of learning
+3. **Done:** saved thumbs up/down. **Next:** use them in the feed (hide disliked videos, show less from disliked channels)
+4. **Done:** the first Duolingo piece: an LLM summary and quiz questions for each video, from a free
+   model running locally in Ollama. **Next:** progress tracking (saving answers, streaks, reviewing
+   missed questions)
 5. **Later:** web scraping for learning material beyond YouTube (sources to be decided)
-6. **Later:** an LLM creates subjects and sub-subjects, so any subject can be covered instead of
-   only the list in `V4__subjects_and_subtopics.sql`. That list becomes the starting catalog
+6. **Done (first version):** the AI topic finder. Users describe what they want to learn, and the
+   LLM finds matching topics or suggests new subjects and sub-subjects, so any subject can be
+   covered. The list in `V4__subjects_and_subtopics.sql` is now the starting catalog. **Maybe
+   next:** deeper levels (Math → Algebra 2 → Quadratics), which would need a recursive feed query
 7. **Maybe:** TikTok/Instagram as additional content sources, if time allows
 
 Nothing above is locked in. It's just where things stand right now.
@@ -698,8 +835,11 @@ educational YouTube videos for those topics. Topics are split into 20 subjects a
 sub-subjects, so users can pick all of Math or just Algebra 2. Up/down buttons on the feed page
 scroll one video at a time.
 
-Each video also has thumbs up/down buttons and a "Video Summary" box, but for now they only appear
-on screen. The thumbs choice isn't saved and resets when the page reloads, and the summary box is
-empty until the LLM summaries from the roadmap are added. Next up: saving thumbs up/down and using it
-to shape the feed.
+Signed-in users can like and dislike videos, save them to playlists and a study notebook, and see
+their watch history. Each video's "Video Summary" box has a short summary and a 2-question quiz,
+written by a free model running in Ollama the first time someone asks for it. Quiz answers aren't
+saved yet; that's the progress-tracking step on the roadmap. Signed-in users can also find topics
+with AI on the interests page and add new ones to the shared catalog; admins can remove them.
 
+Backend tests cover the logic, every repository's SQL against a real Postgres, and the auth, watch
+history and security setup over real HTTP.

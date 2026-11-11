@@ -15,6 +15,22 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # A throwaway Postgres for the repository tests (see TestDatabase.java). Same major version
+    # as docker-compose.yml.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: ci-only-password
+      REQUIRE_DB_TESTS: "true"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6

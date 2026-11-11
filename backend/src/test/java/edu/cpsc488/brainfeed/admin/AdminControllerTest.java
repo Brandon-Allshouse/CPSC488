@@ -87,6 +87,16 @@ class AdminControllerTest {
     }
 
     @Test
+    void readsOnlyPositiveTopicIds() {
+        assertEquals(121, AdminController.parseTopicId("121"));
+        assertBadRequest(() -> AdminController.parseTopicId("0"));
+        assertBadRequest(() -> AdminController.parseTopicId("-5"));
+        assertBadRequest(() -> AdminController.parseTopicId("99999999999"));
+        assertBadRequest(() -> AdminController.parseTopicId("1;DROP TABLE topics"));
+        assertBadRequest(() -> AdminController.parseTopicId(null));
+    }
+
+    @Test
     void searchMatchesAnywhere() {
         assertEquals("%testuser%", AdminController.likePattern(" testuser "));
         assertEquals("%%", AdminController.likePattern(null));
