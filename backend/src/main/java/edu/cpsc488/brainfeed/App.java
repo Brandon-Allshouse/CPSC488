@@ -28,22 +28,35 @@ import edu.cpsc488.brainfeed.saved.StudyNoteController;
 import edu.cpsc488.brainfeed.saved.StudyNoteRepository;
 import edu.cpsc488.brainfeed.history.WatchHistoryController;
 import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
+import edu.cpsc488.brainfeed.llm.Llm;
+import edu.cpsc488.brainfeed.llm.OllamaClient;
+import edu.cpsc488.brainfeed.study.StudyController;
+import edu.cpsc488.brainfeed.study.StudyGenerator;
+import edu.cpsc488.brainfeed.study.StudyRepository;
+import edu.cpsc488.brainfeed.topics.AiTopicRepository;
+import edu.cpsc488.brainfeed.topics.TopicSuggestionController;
+import edu.cpsc488.brainfeed.topics.TopicSuggestions;
 import io.javalin.Javalin;
+import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
 import io.javalin.http.HandlerType;
 import io.javalin.json.JavalinJackson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 /**
  * Backend entry point. Reads settings, connects to Postgres (applying any pending migrations),
@@ -59,6 +72,10 @@ public class App {
 
     private static final Set<HandlerType> STATE_CHANGING =
             Set.of(HandlerType.POST, HandlerType.PUT, HandlerType.PATCH, HandlerType.DELETE);
+
+    // Ollama model names look like qwen3:4b or library/gemma4:e4b. It ends up in a URL body and the
+    // database, so anything else in .env is a typo we stop on.
+    private static final Pattern OLLAMA_MODEL = Pattern.compile("^[A-Za-z0-9._/-]{1,80}(:[A-Za-z0-9._-]{1,19})?$");
 
     public static void main(String[] args) {
         Map<String, String> dotEnv = DotEnv.load();
@@ -124,44 +141,20 @@ public class App {
             fetcher = refresher;
         }
         FeedController feed = new FeedController(topics, videos, auth, fetcher);
+        // One model client for summaries and the topic finder; null when OLLAMA_URL isn't set.
+        Llm llm = llm(settings);
+        StudyController study = new StudyController(studyGenerator(llm, youtubeKey, dataSource));
+        TopicSuggestionController topicFinder = new TopicSuggestionController(
+                new TopicSuggestions(new AiTopicRepository(dataSource), llm), auth);
         AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
         WatchHistoryController history = new WatchHistoryController(
                 new WatchHistoryRepository(dataSource, WatchHistoryController.LIMIT), auth);
         PlaylistController playlists = new PlaylistController(new PlaylistRepository(dataSource), auth);
 
-        ObjectMapper mapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                // Reject bodies with unexpected fields instead of silently ignoring them.
-                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-
         Javalin app = Javalin.create(config -> {
-            config.jsonMapper(new JavalinJackson(mapper, false));
-            // Largest request body the server will accept. Every current endpoint takes a few
-            // hundred bytes, so 16 KB rejects oversized junk early. Raise it only if a new
-            // endpoint (e.g. file upload) genuinely needs more.
-            config.http.maxRequestSize = 16_384L;
-            config.startup.showJavalinBanner = false;
+            configure(config, secureCookies, allowedOrigins);
             // ctx.ip() everywhere (rate limits, security log, admin page) gives the real client.
             config.contextResolver.ip = ctx -> clientIp.resolve(ctx.req().getRemoteAddr(), ctx.header("X-Forwarded-For"));
-            // Don't advertise the server software and version to attackers.
-            config.jetty.modifyHttpConfiguration(http -> http.setSendServerVersion(false));
-
-            // Runs before every route, so new endpoints get these protections automatically.
-            config.routes.before(ctx -> {
-                setSecurityHeaders(ctx, secureCookies);
-                rejectCrossSiteWrites(ctx, allowedOrigins);
-            });
-
-            // Expected errors (bad input, not logged in, ...) become {"error": "..."} with their status.
-            config.routes.exception(ApiException.class, (e, ctx) ->
-                    ctx.status(e.status()).json(Map.of("error", e.getMessage())));
-            // Anything else is a bug. Log the details here, but only send the client a generic message,
-            // since stack traces and SQL errors reveal internals an attacker could use.
-            config.routes.exception(Exception.class, (e, ctx) -> {
-                log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
-                ctx.status(500).json(Map.of("error", "Something went wrong on our end."));
-            });
 
             config.routes.get("/api/health", ctx -> ctx.json(Map.of("status", "ok")));
             auth.register(config.routes);
@@ -171,6 +164,8 @@ public class App {
             admin.register(config.routes);
             history.register(config.routes);
             playlists.register(config.routes);
+            study.register(config.routes);
+            topicFinder.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -180,6 +175,95 @@ public class App {
         }));
 
         app.start(port);
+    }
+
+    /**
+     * The free model running in Ollama, used for video summaries and the AI topic finder. Without
+     * OLLAMA_URL the app still runs: saved summaries are shown, but nothing new is written.
+     */
+    private static Llm llm(Config settings) {
+        String ollamaUrl = settings.get("OLLAMA_URL", null);
+        String model = settings.get("OLLAMA_MODEL", "gemma4:e4b");
+        if (!OLLAMA_MODEL.matcher(model).matches()) {
+            throw new IllegalStateException("OLLAMA_MODEL must be an Ollama model name like gemma4:e4b.");
+        }
+        if (ollamaUrl == null) {
+            log.warn("OLLAMA_URL is not set, so video summaries and the AI topic finder are off. See .env.example.");
+            return null;
+        }
+        if (!ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
+            throw new IllegalStateException("OLLAMA_URL must start with http:// or https://.");
+        }
+        log.info("Video summaries and the topic finder use {} at {}", model, ollamaUrl);
+        return new OllamaClient(ollamaUrl, model);
+    }
+
+    /** Writes video summaries and quizzes in the background (see StudyGenerator). */
+    private static StudyGenerator studyGenerator(Llm llm, String youtubeKey, HikariDataSource dataSource) {
+        StudyGenerator.Descriptions descriptions = youtubeId -> Optional.empty();
+        if (youtubeKey != null) {
+            YouTubeClient youtube = new YouTubeClient(youtubeKey);
+            descriptions = youtubeId -> {
+                try {
+                    return youtube.description(youtubeId);
+                } catch (IOException e) {
+                    // the summary can still be written from the title
+                    log.warn("Couldn't get the description for video {}: {}", youtubeId, e.getMessage());
+                    return Optional.empty();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return Optional.empty();
+                }
+            };
+        }
+        // Its own thread: the model takes much longer than a YouTube search, and shouldn't hold
+        // up new topics' videos.
+        ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "study-writer");
+            thread.setDaemon(true);
+            return thread;
+        });
+        return new StudyGenerator(new StudyRepository(dataSource), llm, descriptions, worker);
+    }
+
+    /** Strict JSON: bodies with fields we don't expect are rejected instead of silently ignored. */
+    static ObjectMapper jsonMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+    }
+
+    /**
+     * The settings and protections every route gets: JSON handling, the body size cap, security
+     * headers, the CSRF check and safe error responses. The API tests use this same method, so
+     * they test exactly what runs in production.
+     */
+    public static void configure(JavalinConfig config, boolean https, Set<String> allowedOrigins) {
+        config.jsonMapper(new JavalinJackson(jsonMapper(), false));
+        // Largest request body the server will accept. Every current endpoint takes a few
+        // hundred bytes, so 16 KB rejects oversized junk early. Raise it only if a new
+        // endpoint (e.g. file upload) genuinely needs more.
+        config.http.maxRequestSize = 16_384L;
+        config.startup.showJavalinBanner = false;
+        // Don't advertise the server software and version to attackers.
+        config.jetty.modifyHttpConfiguration(http -> http.setSendServerVersion(false));
+
+        // Runs before every route, so new endpoints get these protections automatically.
+        config.routes.before(ctx -> {
+            setSecurityHeaders(ctx, https);
+            rejectCrossSiteWrites(ctx, allowedOrigins);
+        });
+
+        // Expected errors (bad input, not logged in, ...) become {"error": "..."} with their status.
+        config.routes.exception(ApiException.class, (e, ctx) ->
+                ctx.status(e.status()).json(Map.of("error", e.getMessage())));
+        // Anything else is a bug. Log the details here, but only send the client a generic message,
+        // since stack traces and SQL errors reveal internals an attacker could use.
+        config.routes.exception(Exception.class, (e, ctx) -> {
+            log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
+            ctx.status(500).json(Map.of("error", "Something went wrong on our end."));
+        });
     }
 
     private static void setSecurityHeaders(Context ctx, boolean https) {

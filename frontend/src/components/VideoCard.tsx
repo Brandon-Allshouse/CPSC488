@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ExternalLink, Link2, Play, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { Check, ExternalLink, Link2, Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { FeedVideo, VideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
 import { timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import SaveMenu from './SaveMenu';
+import StudyBox from './StudyBox';
 
 // youtube-nocookie.com is YouTube's "privacy mode" player, which doesn't set tracking cookies
 // until you hit play. If you change either domain, update the CSP in vite.config.ts too.
@@ -270,14 +271,8 @@ export default function VideoCard({
             </button>
           </span>
         </div>
-        {/* Placeholder until the LLM summaries on the roadmap fill it in. Team rule: no "coming soon" wording. */}
-        <div className="video-summary-label mt-1 flex flex-col gap-1 rounded-lg bg-muted/60 p-3 text-sm">
-          <p className="flex items-center gap-2">
-            <Sparkles aria-hidden="true" className="size-4 text-primary" />
-            <strong>Video Summary</strong>
-          </p>
-          <p className="text-muted-foreground">No summary for this video.</p>
-        </div>
+        {/* Pressing play starts writing the summary, so it's usually ready by the end of the video. */}
+        <StudyBox youtubeId={video.youtubeId} autoStart={playing} />
       </section>
     </article>
   );

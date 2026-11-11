@@ -26,7 +26,7 @@ public class TopicRepository {
     /** Subjects first, alphabetically, then sub-subjects in id order (the order they're learned in). */
     public List<Topic> listAll() {
         String sql = """
-                SELECT id, name, parent_id FROM topics
+                SELECT id, name, parent_id, source FROM topics
                 ORDER BY parent_id IS NOT NULL, CASE WHEN parent_id IS NULL THEN name END, id
                 """;
         List<Topic> topics = new ArrayList<>();
@@ -34,7 +34,8 @@ public class TopicRepository {
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                topics.add(new Topic(rs.getInt("id"), rs.getString("name"), rs.getObject("parent_id", Integer.class)));
+                topics.add(new Topic(rs.getInt("id"), rs.getString("name"), rs.getObject("parent_id", Integer.class),
+                        "ai".equals(rs.getString("source"))));
             }
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -90,12 +91,14 @@ public class TopicRepository {
 
     /**
      * Topics that have never been fetched, or not within {@code maxAge}. Topics someone has picked
-     * come first, so a new pick gets videos within the hour instead of waiting its turn.
+     * come first, so a new pick gets videos within the hour instead of waiting its turn. AI-made
+     * topics nobody has picked are skipped, so a growing catalog can't use up the YouTube quota.
      */
     List<SearchTopic> dueForRefresh(Duration maxAge) {
         String sql = """
                 SELECT id, search_query FROM topics t
-                WHERE videos_fetched_at IS NULL OR videos_fetched_at < now() - make_interval(secs => ?)
+                WHERE (videos_fetched_at IS NULL OR videos_fetched_at < now() - make_interval(secs => ?))
+                  AND (source = 'seeded' OR EXISTS (SELECT 1 FROM user_interests ui WHERE ui.topic_id = t.id))
                 ORDER BY EXISTS (SELECT 1 FROM user_interests ui WHERE ui.topic_id = t.id) DESC,
                          videos_fetched_at NULLS FIRST, id
                 """;

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Known false positives for the security scan (mvn verify -P security-scan). Every entry needs a
+  note saying why it doesn't apply to us, and should be checked again when the library updates.
+  Don't suppress a finding just to make the build pass.
+-->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <suppress until="2027-05-01Z">
+        <notes>
+            CVE-2026-53914 is about the Kotlin compiler's build cache. We don't compile Kotlin: we only
+            get the kotlin-stdlib runtime library because Javalin depends on it, and the compiler code
+            the CVE is in isn't part of that jar. Checked 2026-11-10. Expires so someone looks again
+            (and drop it once Javalin moves to a Kotlin version the NVD no longer flags).
+        </notes>
+        <packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin-stdlib@.*$</packageUrl>
+        <cve>CVE-2026-53914</cve>
+    </suppress>
+</suppressions>

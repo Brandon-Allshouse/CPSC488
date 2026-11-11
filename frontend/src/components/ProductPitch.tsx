@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { BookOpen, ListVideo, PlaySquare } from 'lucide-react';
+import { BookOpen, ListChecks, ListVideo, PlaySquare } from 'lucide-react';
 import { fetchTopics, type Topic } from '../api/feed';
 
 // How many subject names to show as chips before "+ N more".
 const SHOWN_SUBJECTS = 10;
 
-// Only features that exist today. Add to this list when quizzes and progress ship, not before.
+// Only features that exist today. Add to this list when progress tracking ships, not before.
 const FEATURES: { icon: ReactNode; title: string; text: string }[] = [
   { icon: <PlaySquare />, title: 'A feed from your topics', text: 'Pick whole subjects or just parts, like Algebra 2.' },
+  { icon: <ListChecks />, title: 'Summaries and quizzes', text: 'Get a short summary and two questions on each video.' },
   { icon: <BookOpen />, title: 'Study notes', text: 'Save a video and write down what you learned.' },
   { icon: <ListVideo />, title: 'Playlists and history', text: 'Keep videos for later and find ones you watched.' },
 ];

@@ -4,7 +4,9 @@ import {
   banVideo,
   fetchAdminActions,
   fetchAdminStats,
+  fetchAiTopics,
   fetchBannedVideos,
+  removeAiTopic,
   searchUsers,
   searchVideos,
   unbanUser,
@@ -73,5 +75,17 @@ describe('admin api', () => {
       '/api/admin/banned-videos',
       '/api/admin/actions',
     ]);
+  });
+
+  it('lists AI-added topics and removes one with a reason', async () => {
+    const fetchMock = fakeFetch({ topics: [] });
+    expect(await fetchAiTopics()).toEqual([]);
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/topics');
+
+    const removeMock = fakeFetch(null, 204);
+    await removeAiTopic(121, 'Not educational');
+    expect(removeMock.mock.calls[0][0]).toBe('/api/admin/topics/121');
+    expect(removeMock.mock.calls[0][1].method).toBe('DELETE');
+    expect(JSON.parse(removeMock.mock.calls[0][1].body)).toEqual({ reason: 'Not educational' });
   });
 });

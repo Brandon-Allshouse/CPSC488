@@ -126,6 +126,8 @@
                         <configuration>
                             <failBuildOnCVSS>7</failBuildOnCVSS>
                             <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+                            <!-- Checked false positives, each with a reason and an expiry date. -->
+                            <suppressionFile>dependency-check-suppressions.xml</suppressionFile>
                         </configuration>
                         <executions>
                             <execution>

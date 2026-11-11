@@ -202,6 +202,61 @@ public class AdminRepository {
         });
     }
 
+    /** An AI-added topic, for admins to review. addedBy is null if that account was deleted. */
+    public record AiTopic(int id, String name, String subject, String addedBy, OffsetDateTime createdAt, long picks) {
+    }
+
+    /** AI-added topics, newest first, with who added them and how many people picked them. */
+    public List<AiTopic> aiTopics(int limit) {
+        String sql = """
+                SELECT t.id, t.name, p.name AS subject, u.username AS added_by, t.created_at,
+                       (SELECT count(*) FROM user_interests ui WHERE ui.topic_id = t.id) AS picks
+                FROM topics t
+                LEFT JOIN topics p ON p.id = t.parent_id
+                LEFT JOIN users u ON u.id = t.created_by
+                WHERE t.source = 'ai'
+                ORDER BY t.created_at DESC, t.id DESC
+                LIMIT ?
+                """;
+        return query(sql, ps -> ps.setInt(1, limit), rs -> new AiTopic(rs.getInt("id"), rs.getString("name"),
+                rs.getString("subject"), rs.getString("added_by"), rs.getObject("created_at", OffsetDateTime.class),
+                rs.getLong("picks")));
+    }
+
+    /**
+     * Removes an AI-added topic and blocks its name, so asking the AI again can't bring it back.
+     * Removing a subject removes its topics too. Their videos go with them (and so out of
+     * everyone's playlists and history), the same as banning those videos. Seeded topics can't be
+     * removed this way. Returns false if there's no AI topic with that id.
+     */
+    public boolean removeAiTopic(long adminId, String adminIp, int topicId, String reason) {
+        return inTransaction(conn -> {
+            List<String> names = new ArrayList<>();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT name FROM topics WHERE id = ? AND source = 'ai' FOR UPDATE")) {
+                ps.setInt(1, topicId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        return false;
+                    }
+                    names.add(rs.getString(1));
+                }
+            }
+            update(conn, """
+                    INSERT INTO banned_topic_names (name_lower, reason, banned_by)
+                    VALUES (lower(?), ?, ?)
+                    ON CONFLICT (name_lower) DO UPDATE SET reason = EXCLUDED.reason
+                    """, ps -> {
+                ps.setString(1, names.get(0));
+                ps.setString(2, reason);
+                ps.setLong(3, adminId);
+            });
+            update(conn, "DELETE FROM topics WHERE id = ?", ps -> ps.setInt(1, topicId));
+            logAction(conn, adminId, adminIp, "remove_topic", names.get(0) + " (#" + topicId + ")", reason);
+            return true;
+        });
+    }
+
     public List<AdminAction> recentActions(int limit) {
         String sql = """
                 SELECT a.id, u.username AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at

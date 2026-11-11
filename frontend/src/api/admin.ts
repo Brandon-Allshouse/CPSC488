@@ -46,12 +46,24 @@ export interface BannedVideo {
 export interface AdminAction {
   id: number;
   admin: string | null;
-  action: 'ban_user' | 'unban_user' | 'ban_video' | 'unban_video';
+  action: 'ban_user' | 'unban_user' | 'ban_video' | 'unban_video' | 'remove_topic';
   target: string;
   reason: string | null;
   // where the admin did it from
   ip: string | null;
   createdAt: string;
+}
+
+// A topic a user added with the AI topic finder. addedBy is null if that account was deleted;
+// picks is how many users have it as an interest. The name came from the LLM: plain text only.
+export interface AiTopic {
+  id: number;
+  name: string;
+  /** null for a subject */
+  subject: string | null;
+  addedBy: string | null;
+  createdAt: string;
+  picks: number;
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
@@ -97,4 +109,14 @@ export async function unbanVideo(youtubeId: string): Promise<void> {
 export async function fetchAdminActions(): Promise<AdminAction[]> {
   const { actions } = await request<{ actions: AdminAction[] }>('/api/admin/actions');
   return actions;
+}
+
+export async function fetchAiTopics(): Promise<AiTopic[]> {
+  const { topics } = await request<{ topics: AiTopic[] }>('/api/admin/topics');
+  return topics;
+}
+
+/** Removes an AI-added topic (and its topics, if it's a subject) and blocks the name. */
+export async function removeAiTopic(topicId: number, reason: string): Promise<void> {
+  await request<void>(`/api/admin/topics/${topicId}`, { method: 'DELETE', body: JSON.stringify({ reason }) });
 }

@@ -46,16 +46,58 @@ services:
       # Browsers reach the backend through the Vite dev server in the "frontend" container, so it's
       # the one proxy whose X-Forwarded-For header is believed (see ClientIp.java).
       TRUSTED_PROXIES: frontend
+      # The LLM that writes video summaries and quizzes (the ollama service below).
+      OLLAMA_URL: http://ollama:11434
+      # Same default as ollama-pull below, so the backend asks for the model that was downloaded.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e4b}
     depends_on:
       db:
         condition: service_healthy
     ports:
       # Only needed to call the API directly (e.g. curl); the frontend reaches it inside Docker.
       - "127.0.0.1:7070:7070"
-    # The only service on both networks, so every request to the database has to go through it.
+    # The only service on more than one network, so every request to the database or the LLM has
+    # to go through it.
     networks:
       - data
       - web
+      - llm
+
+  # Runs a free, open LLM on this laptop for video summaries and quizzes, so it costs nothing and
+  # no API key is needed. It uses the CPU, so the first summary after it's been idle takes longer
+  # while the model loads. Ollama has no login, so it gets no port: only the backend can reach it.
+  ollama:
+    image: ollama/ollama:0.40.11
+    environment:
+      # Keep the model in memory for 30 minutes after the last summary, then free the RAM.
+      OLLAMA_KEEP_ALIVE: 30m
+      # One summary at a time (the backend sends them one by one anyway) and one model loaded.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      # Downloaded models (a few GB), kept so they're only downloaded once; `down -v` erases them.
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - llm
+
+  # Downloads the model the first time (about 6.6 GB for gemma4:e4b), then exits. Later runs see
+  # it's already there and finish in a second. Summaries say "unavailable" until it's done.
+  ollama-pull:
+    image: ollama/ollama:0.40.11
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "${OLLAMA_MODEL:-gemma4:e4b}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - llm
 
   frontend:
     image: node:24-trixie-slim
@@ -118,18 +160,33 @@ services:
     environment:
       # Only used by the security-scan profile (see .env.example).
       NVD_API_KEY: ${NVD_API_KEY:-}
+      # The repository tests run against a real Postgres: a separate brainfeed_test database on
+      # the db service, recreated each run, so your real data is never touched (TestDatabase.java).
+      TEST_DB_URL: jdbc:postgresql://db:5432/
+      TEST_DB_USER: ${DB_USER:-brainfeed}
+      TEST_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env - copy .env.example to .env}
+      # Fail instead of skipping them if the database can't be reached.
+      REQUIRE_DB_TESTS: "true"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       # Keeps downloaded libraries between runs so tests start fast after the first time.
       - maven-cache:/root/.m2
+    networks:
+      - data
 
-# Keeps the layers apart: database <-> backend on "data", backend <-> frontend on "web".
+# Keeps the layers apart: database <-> backend on "data", backend <-> frontend on "web", and
+# backend <-> LLM on "llm". The frontend can reach neither the database nor the LLM.
 networks:
   data:
   web:
+  llm:
 
 volumes:
   brainfeed-pgdata:
   frontend-node-modules:
   maven-cache:
   pgadmin-data:
+  ollama-models:

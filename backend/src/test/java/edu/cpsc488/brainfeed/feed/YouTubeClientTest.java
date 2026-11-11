@@ -121,4 +121,31 @@ class YouTubeClientTest {
         assertTrue(url.contains("videoCategoryId=27"));
         assertFalse(url.contains(" "));
     }
+
+    @Test
+    void readsTheDescriptionFromVideosList() throws Exception {
+        JsonNode body = MAPPER.readTree("{\"items\": [{\"snippet\": {\"description\": \"Slopes of tangent lines.\\nSubscribe!\"}}]}");
+        assertEquals("Slopes of tangent lines.\nSubscribe!", YouTubeClient.parseDescription(body).orElseThrow());
+    }
+
+    @Test
+    void noDescriptionIsEmpty() throws Exception {
+        assertTrue(YouTubeClient.parseDescription(MAPPER.readTree("{\"items\": []}")).isEmpty());
+        assertTrue(YouTubeClient.parseDescription(MAPPER.readTree("{\"items\": [{\"snippet\": {\"description\": \"  \"}}]}")).isEmpty());
+    }
+
+    @Test
+    void veryLongDescriptionsAreCut() throws Exception {
+        String longText = "a".repeat(YouTubeClient.MAX_DESCRIPTION + 100);
+        JsonNode body = MAPPER.readTree("{\"items\": [{\"snippet\": {\"description\": \"" + longText + "\"}}]}");
+        assertEquals(YouTubeClient.MAX_DESCRIPTION, YouTubeClient.parseDescription(body).orElseThrow().length());
+    }
+
+    @Test
+    void videosUrlOnlyAsksForTheDescription() {
+        String url = YouTubeClient.videosUrl("dQw4w9WgXcQ", "test-key");
+        assertTrue(url.startsWith("https://www.googleapis.com/youtube/v3/videos?part=snippet&id=dQw4w9WgXcQ"), url);
+        assertTrue(url.contains("&fields=items%28snippet%28description%29%29"), url);
+        assertFalse(url.contains(" "));
+    }
 }

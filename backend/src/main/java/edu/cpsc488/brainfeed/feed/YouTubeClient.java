@@ -15,23 +15,28 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 /**
- * Searches YouTube using the YouTube Data API (search.list). Only the backend talks to YouTube,
+ * Searches YouTube using the YouTube Data API (search.list), and looks up video descriptions for
+ * the LLM summaries (videos.list). Only the backend talks to YouTube,
  * so the API key never ends up in the browser.
  *
  * <p>We treat everything YouTube sends back like user input: video ids have to look like real
  * YouTube ids, and titles get control characters removed and a length cap.
  *
- * <p>Each search costs 100 of our 10,000 free quota units per day.
+ * <p>Each search costs 100 of our 10,000 free quota units per day; a description lookup costs 1.
  */
 public class YouTubeClient {
 
     private static final String SEARCH_URL = "https://www.googleapis.com/youtube/v3/search";
+    private static final String VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos";
     static final Pattern VIDEO_ID = Pattern.compile("^[A-Za-z0-9_-]{11}$");
     static final int MAX_TITLE = 300;
     static final int MAX_CHANNEL = 200;
+    // YouTube allows 5,000; StudyPrompt only uses the first 2,000
+    static final int MAX_DESCRIPTION = 5000;
 
     private final String apiKey;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -70,6 +75,49 @@ public class YouTubeClient {
             throw new IOException("YouTube returned HTTP " + response.statusCode() + " (" + errorReason(body) + ")");
         }
         return parseResults(body, topicId);
+    }
+
+    /**
+     * The video's full description (videos.list), which the LLM writes its summary from. Costs 1
+     * quota unit. Empty if the video has none or the id doesn't look like a YouTube id.
+     *
+     * @throws IOException if YouTube can't be reached or sends back an error (never includes the key)
+     */
+    public Optional<String> description(String videoId) throws IOException, InterruptedException {
+        if (!VIDEO_ID.matcher(videoId).matches()) {
+            return Optional.empty();
+        }
+        HttpRequest request = HttpRequest.newBuilder(URI.create(videosUrl(videoId, apiKey)))
+                .timeout(Duration.ofSeconds(10))
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+        HttpResponse<String> response;
+        try {
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw new IOException("YouTube request failed: " + e.getClass().getSimpleName());
+        }
+        JsonNode body = mapper.readTree(response.body());
+        if (response.statusCode() != 200) {
+            throw new IOException("YouTube returned HTTP " + response.statusCode() + " (" + errorReason(body) + ")");
+        }
+        return parseDescription(body);
+    }
+
+    static String videosUrl(String videoId, String apiKey) {
+        return VIDEOS_URL
+                + "?part=snippet&id=" + URLEncoder.encode(videoId, StandardCharsets.UTF_8)
+                // only the description, to keep the response small
+                + "&fields=" + URLEncoder.encode("items(snippet(description))", StandardCharsets.UTF_8)
+                + "&key=" + URLEncoder.encode(apiKey, StandardCharsets.UTF_8);
+    }
+
+    /** Pulls the description out of a videos.list response. Newlines are kept; StudyPrompt cleans it. */
+    static Optional<String> parseDescription(JsonNode body) {
+        String description = body.path("items").path(0).path("snippet").path("description").asText("");
+        description = description.length() > MAX_DESCRIPTION ? description.substring(0, MAX_DESCRIPTION) : description;
+        return description.isBlank() ? Optional.empty() : Optional.of(description);
     }
 
     static String searchUrl(String query, String apiKey) {

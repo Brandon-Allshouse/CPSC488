@@ -6,7 +6,9 @@ import {
   banVideo,
   fetchAdminActions,
   fetchAdminStats,
+  fetchAiTopics,
   fetchBannedVideos,
+  removeAiTopic,
   searchUsers,
   searchVideos,
   unbanUser,
@@ -26,6 +28,8 @@ vi.mock('../api/admin', () => ({
   banVideo: vi.fn(),
   unbanVideo: vi.fn(),
   fetchAdminActions: vi.fn(),
+  fetchAiTopics: vi.fn(),
+  removeAiTopic: vi.fn(),
 }));
 
 const adminUser = { id: 1, email: 'admin@sru.edu', username: 'testadmin', createdAt: '2026-10-05T00:00:00Z', admin: true };
@@ -98,6 +102,11 @@ beforeEach(() => {
   vi.mocked(unbanUser).mockResolvedValue(undefined);
   vi.mocked(banVideo).mockResolvedValue(undefined);
   vi.mocked(unbanVideo).mockResolvedValue(undefined);
+  vi.mocked(fetchAiTopics).mockResolvedValue([
+    { id: 121, name: 'Black Holes', subject: 'Space', addedBy: 'otheruser', createdAt: '2026-11-10T00:00:00Z', picks: 3 },
+    { id: 122, name: 'Cooking', subject: null, addedBy: null, createdAt: '2026-11-10T00:00:00Z', picks: 0 },
+  ]);
+  vi.mocked(removeAiTopic).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -299,5 +308,36 @@ describe('AdminPage', () => {
     fireEvent.submit(search.closest('form')!);
     await vi.waitFor(() => expect(searchUsers).toHaveBeenLastCalledWith('198.51.100.7'));
   });
-});
 
+  it('lists AI-added topics with who added them and how many picked them', async () => {
+    renderPage();
+    const section = screen.getByRole('region', { name: 'AI-added topics' });
+    expect(await within(section).findByText('Black Holes')).toBeTruthy();
+    expect(within(section).getByText('otheruser')).toBeTruthy();
+    expect(within(section).getByText('3')).toBeTruthy();
+    // a subject has no subject of its own, and a deleted account shows as such
+    expect(within(section).getByText('New subject')).toBeTruthy();
+    expect(within(section).getByText('Deleted account')).toBeTruthy();
+  });
+
+  it('asks for a reason before removing an AI topic', async () => {
+    renderPage();
+    const section = screen.getByRole('region', { name: 'AI-added topics' });
+    fireEvent.click(await within(section).findByRole('button', { name: 'Remove Black Holes' }));
+    const confirm = within(section).getByRole('button', { name: 'Confirm removal' }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.change(within(section).getByLabelText('Reason for removing Black Holes'), { target: { value: 'Not educational' } });
+    fireEvent.click(confirm);
+    expect(await screen.findByText('Removed "Black Holes".')).toBeTruthy();
+    expect(removeAiTopic).toHaveBeenCalledWith(121, 'Not educational');
+  });
+
+  it('shows AI topic names as plain text', async () => {
+    vi.mocked(fetchAiTopics).mockResolvedValue([
+      { id: 5, name: '<b>bold</b>', subject: 'Space', addedBy: 'testuser', createdAt: '2026-11-10T00:00:00Z', picks: 0 },
+    ]);
+    const { container } = renderPage();
+    expect(await screen.findByText('<b>bold</b>')).toBeTruthy();
+    expect(container.querySelector('b')).toBeNull();
+  });
+});

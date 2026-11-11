@@ -5,8 +5,10 @@ import { cn } from '@/lib/utils';
 import { Alert } from './alert';
 import { Badge } from './badge';
 import { Button } from './button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card';
 import { Input } from './input';
 import { Label } from './label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 
 afterEach(() => {
   cleanup();
@@ -90,5 +92,45 @@ describe('Alert and Badge', () => {
     const { container } = render(<Badge>{'<b>Banned</b>'}</Badge>);
     expect(screen.getByText('<b>Banned</b>')).toBeTruthy();
     expect(container.querySelector('b')).toBeNull();
+  });
+});
+
+describe('Card', () => {
+  it('puts the title, description, content and footer in order and keeps extra classes', () => {
+    const { container } = render(
+      <Card className="extra">
+        <CardHeader>
+          <CardTitle>Question 1</CardTitle>
+          <CardDescription>Pick one</CardDescription>
+        </CardHeader>
+        <CardContent>Body</CardContent>
+        <CardFooter>Footer</CardFooter>
+      </Card>,
+    );
+    expect(screen.getByRole('heading', { name: 'Question 1' }).tagName).toBe('H2');
+    expect(container.firstElementChild!.classList.contains('extra')).toBe(true);
+    expect(container.textContent).toBe('Question 1Pick oneBodyFooter');
+  });
+});
+
+describe('Table', () => {
+  it('builds a real table that screen readers can read, with text shown as text', () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead scope="col">Title</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>{'<b>plain</b>'}</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    expect(screen.getByRole('table')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Title' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '<b>plain</b>' })).toBeTruthy();
   });
 });

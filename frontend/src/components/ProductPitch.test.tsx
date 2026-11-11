@@ -24,6 +24,7 @@ describe('ProductPitch', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Learn with short videos' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'A feed from your topics' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Study notes' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Summaries and quizzes' })).toBeTruthy();
   });
 
   it('counts the real subjects and topics and shows the first ten', async () => {

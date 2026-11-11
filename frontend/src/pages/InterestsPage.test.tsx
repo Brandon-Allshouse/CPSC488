@@ -2,9 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchTopics } from '../api/feed';
+import { addSuggestedTopic, suggestTopics } from '../api/topics';
 import InterestsPage from './InterestsPage';
 
 vi.mock('../api/feed', () => ({ fetchTopics: vi.fn() }));
+vi.mock('../api/topics', () => ({ suggestTopics: vi.fn(), addSuggestedTopic: vi.fn() }));
 
 const topics = [
   { id: 1, name: 'Math', parentId: null },
@@ -221,6 +223,53 @@ describe('InterestsPage', () => {
     expect(screen.queryByRole('combobox')).toBeNull();
     expect(await screen.findByRole('button', { name: 'Select all subjects' })).toBeTruthy();
     expect(screen.getByRole('combobox')).toBeTruthy();
+  });
+
+  it('offers the AI topic finder to signed-in users only', async () => {
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    expect(await screen.findByRole('heading', { name: 'Find topics with AI' })).toBeTruthy();
+    cleanup();
+    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest />);
+    await screen.findByRole('button', { name: 'All of Math' });
+    expect(screen.queryByRole('heading', { name: 'Find topics with AI' })).toBeNull();
+    expect(screen.getByText(/Log in to find topics with AI/)).toBeTruthy();
+  });
+
+  it('a topic added with AI shows up in its subject, picked, and gets saved', async () => {
+    vi.mocked(suggestTopics).mockResolvedValue({
+      matches: [],
+      ideas: [{ key: 'key-1', name: 'Matrices', subject: 'Math', newSubject: false }],
+    });
+    vi.mocked(addSuggestedTopic).mockResolvedValue([{ id: 50, name: 'Matrices', parentId: 1, ai: true }]);
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<InterestsPage initial={[]} onSave={onSave} isGuest={false} />);
+    fireEvent.change(await screen.findByLabelText('What do you want to learn?'), { target: { value: 'matrices' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Find topics' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Matrices' }));
+
+    // it's in the Math section, marked as added with AI, and already picked
+    const added = await screen.findByRole('button', { name: 'Matrices, added with AI' });
+    expect(added.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
+    expect(onSave).toHaveBeenCalledWith([50]);
+  });
+
+  it('a new subject from AI gets its own section', async () => {
+    vi.mocked(suggestTopics).mockResolvedValue({
+      matches: [],
+      ideas: [{ key: 'key-2', name: 'Baking Bread', subject: 'Cooking', newSubject: true }],
+    });
+    vi.mocked(addSuggestedTopic).mockResolvedValue([
+      { id: 60, name: 'Cooking', parentId: null, ai: true },
+      { id: 61, name: 'Baking Bread', parentId: 60, ai: true },
+    ]);
+    const { container } = render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    fireEvent.change(await screen.findByLabelText('What do you want to learn?'), { target: { value: 'bread' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Find topics' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Baking Bread' }));
+    await screen.findByRole('button', { name: 'Baking Bread, added with AI' });
+    const summaries = [...container.querySelectorAll('details.subject summary')].map((el) => el.textContent);
+    expect(summaries.some((text) => text?.startsWith('Cooking'))).toBe(true);
   });
 });
 

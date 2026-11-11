@@ -9,6 +9,8 @@ export interface Topic {
   id: number;
   name: string;
   parentId: number | null;
+  /** true if a user added it with the AI topic finder. The name came from the LLM: plain text only. */
+  ai?: boolean;
 }
 
 // Matches Video.java. title and channelTitle come from YouTube: only ever render them as plain

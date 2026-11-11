@@ -7,6 +7,7 @@ import {
   History,
   Search,
   ShieldCheck,
+  Sparkles,
   ShieldOff,
   UserX,
   Users,
@@ -16,7 +17,9 @@ import {
   banVideo,
   fetchAdminActions,
   fetchAdminStats,
+  fetchAiTopics,
   fetchBannedVideos,
+  removeAiTopic,
   searchUsers,
   searchVideos,
   unbanUser,
@@ -25,6 +28,7 @@ import {
   type AdminStats,
   type AdminUser,
   type AdminVideo,
+  type AiTopic,
   type BannedVideo,
 } from '../api/admin';
 import { ApiError } from '../api/client';
@@ -45,6 +49,7 @@ const ACTION_LABELS: Record<AdminAction['action'], string> = {
   unban_user: 'Unbanned user',
   ban_video: 'Banned video',
   unban_video: 'Unbanned video',
+  remove_topic: 'Removed topic',
 };
 
 function formatDate(value: string) {
@@ -53,10 +58,12 @@ function formatDate(value: string) {
 
 // Asks for the reason before a ban goes through, so a stray click can't ban anyone and the
 // admin log always says why.
-function BanReasonForm({ label, onConfirm, onCancel }: {
+function BanReasonForm({ label, onConfirm, onCancel, verb = 'ban' }: {
   label: string;
   onConfirm: (reason: string) => Promise<void>;
   onCancel: () => void;
+  /** 'remove' for AI topics, which are removed rather than banned */
+  verb?: 'ban' | 'remove';
 }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -74,7 +81,7 @@ function BanReasonForm({ label, onConfirm, onCancel }: {
   return (
     <form className="admin-ban-form flex min-w-64 animate-fade-in-up items-center gap-2" onSubmit={submit}>
       <Input
-        aria-label={`Reason for banning ${label}`}
+        aria-label={`Reason for ${verb === 'ban' ? 'banning' : 'removing'} ${label}`}
         placeholder="Reason"
         className="h-8"
         value={reason}
@@ -83,7 +90,7 @@ function BanReasonForm({ label, onConfirm, onCancel }: {
         autoFocus
       />
       <Button type="submit" size="sm" variant="destructive" disabled={busy || reason.trim() === ''}>
-        Confirm ban
+        {verb === 'ban' ? 'Confirm ban' : 'Confirm removal'}
       </Button>
       <Button size="sm" variant="ghost" onClick={onCancel}>
         Cancel
@@ -174,6 +181,7 @@ export default function AdminPage(navigation: PageNavigation) {
   const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [bannedVideos, setBannedVideos] = useState<BannedVideo[]>([]);
   const [actions, setActions] = useState<AdminAction[]>([]);
+  const [aiTopics, setAiTopics] = useState<AiTopic[]>([]);
   // Which row's "Ban" button was pressed, e.g. "user:5" or "video:dQw4w9WgXcQ".
   const [pendingBan, setPendingBan] = useState<string | null>(null);
   const [videoLink, setVideoLink] = useState('');
@@ -193,14 +201,16 @@ export default function AdminPage(navigation: PageNavigation) {
 
   // The parts of the page every ban or unban changes.
   async function refreshSummary() {
-    const [newStats, newBanned, newActions] = await Promise.all([
+    const [newStats, newBanned, newActions, newTopics] = await Promise.all([
       fetchAdminStats(),
       fetchBannedVideos(),
       fetchAdminActions(),
+      fetchAiTopics(),
     ]);
     setStats(newStats);
     setBannedVideos(newBanned);
     setActions(newActions);
+    setAiTopics(newTopics);
   }
 
   useEffect(() => {
@@ -274,7 +284,7 @@ export default function AdminPage(navigation: PageNavigation) {
   ];
 
   return (
-    <PageLayout {...navigation} name="admin" title="Admin" description="Ban users and videos, and see what other admins did.">
+    <PageLayout {...navigation} name="admin" title="Admin" description="Ban users and videos, remove AI-added topics, and see what other admins did.">
       {error && (
         <Alert variant="destructive" role="alert">
           <CircleAlert aria-hidden="true" />
@@ -499,6 +509,59 @@ export default function AdminPage(navigation: PageNavigation) {
                   >
                     Unban
                   </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </AdminSection>
+
+      <AdminSection
+        id="admin-ai-topics"
+        title="AI-added topics"
+        icon={<Sparkles />}
+        description="Topics users added with the AI topic finder. Removing one also removes its videos and blocks the name, so it can't be added again."
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Topic</TableHead>
+              <TableHead scope="col">Subject</TableHead>
+              <TableHead scope="col">Added by</TableHead>
+              <TableHead scope="col">Date</TableHead>
+              <TableHead scope="col">Picked by</TableHead>
+              <TableHead scope="col" className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {aiTopics.length === 0 && <EmptyRow columns={6}>No AI-added topics yet.</EmptyRow>}
+            {aiTopics.map((topic) => (
+              <TableRow key={topic.id}>
+                <TableCell className="font-medium">{topic.name}</TableCell>
+                <TableCell className="text-muted-foreground">{topic.subject ?? 'New subject'}</TableCell>
+                <TableCell className="text-muted-foreground">{topic.addedBy ?? 'Deleted account'}</TableCell>
+                <TableCell className="text-muted-foreground">{formatDate(topic.createdAt)}</TableCell>
+                <TableCell className="tabular-nums">{topic.picks}</TableCell>
+                <TableCell className="text-right">
+                  {pendingBan === `topic:${topic.id}` ? (
+                    <BanReasonForm
+                      verb="remove"
+                      label={topic.name}
+                      onCancel={() => setPendingBan(null)}
+                      onConfirm={(reason) =>
+                        runAction(() => removeAiTopic(topic.id, reason), `Removed "${topic.name}".`, async () => {})
+                      }
+                    />
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="destructive-outline"
+                      aria-label={`Remove ${topic.name}`}
+                      onClick={() => setPendingBan(`topic:${topic.id}`)}
+                    >
+                      Remove
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
