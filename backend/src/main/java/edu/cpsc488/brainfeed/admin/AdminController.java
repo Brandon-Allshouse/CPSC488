@@ -40,6 +40,7 @@ public class AdminController {
         this.auth = auth;
     }
 
+    /** Adds the admin routes, with the admin check in front of all of /api/admin/*. */
     public void register(RoutesConfig routes) {
         routes.before("/api/admin/*", this::requireAdmin);
         routes.get("/api/admin/stats", this::handleStats);

@@ -24,6 +24,7 @@ interface Props {
   onGuest: () => void;
 }
 
+/** The first screen: log in, sign up, or continue as a guest. Checks the fields before sending them. */
 export default function LoginPage({ onAuthenticated, onGuest }: Props) {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');

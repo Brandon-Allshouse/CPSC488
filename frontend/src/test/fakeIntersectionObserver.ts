@@ -34,6 +34,7 @@ class FakeObserver {
 
 const observers: FakeObserver[] = [];
 
+/** Swaps in the fake observer for this test. Call it in beforeEach, then use scrollInto(). */
 export function useFakeIntersectionObserver() {
   observers.length = 0;
   vi.stubGlobal('IntersectionObserver', FakeObserver);

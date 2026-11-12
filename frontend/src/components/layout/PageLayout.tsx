@@ -14,6 +14,8 @@ export interface PageNavigation {
   onBack: () => void;
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
+  /** Opens Your videos scrolled to the Study notebook. */
+  onShowNotebook?: () => void;
   onShowLeaderboard: () => void;
   onShowHistory?: () => void;
   onShowAdmin?: () => void;

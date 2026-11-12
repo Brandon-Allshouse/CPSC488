@@ -70,6 +70,7 @@ public class AuthController {
         this.dummyHash = hasher.hash("dummy password used only for timing equalization");
     }
 
+    /** Adds the /api/auth routes. */
     public void register(RoutesConfig routes) {
         routes.post("/api/auth/register", this::handleRegister);
         routes.post("/api/auth/login", this::handleLogin);
@@ -157,13 +158,6 @@ public class AuthController {
         loginFailures.recordSuccess(ip, email);
         sessions.deleteExpired();
 
-        // Always issue a brand-new session on login (prevents session fixation) and drop any
-        // session the browser already had.
-        String oldToken = ctx.cookie(cookieName);
-        if (oldToken != null) {
-            sessions.delete(oldToken);
-        }
-
         User user = found.get().user();
         users.recordLogin(user.id(), ctx.ip());
         SecurityLog.success("login", ctx, user.id());
@@ -198,7 +192,16 @@ public class AuthController {
         return sessions.findUserId(token).flatMap(users::findById);
     }
 
+    /**
+     * Always issues a brand-new session (prevents session fixation) and ends any session the
+     * browser already had, so signing up or logging in as someone else never leaves the previous
+     * account's session alive in the database.
+     */
     private void startSession(Context ctx, User user) {
+        String oldToken = ctx.cookie(cookieName);
+        if (oldToken != null && SESSION_TOKEN.matcher(oldToken).matches()) {
+            sessions.delete(oldToken);
+        }
         String token = sessions.create(user.id());
         setSessionCookie(ctx, token, sessions.lifetime().toSeconds());
     }

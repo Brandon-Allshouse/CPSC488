@@ -99,6 +99,44 @@ class AuthApiTest {
     }
 
     @Test
+    void signingUpWhileLoggedInEndsTheOldSession() {
+        // the browser's old session must not stay usable in the database after switching accounts
+        server.send("POST", "/api/auth/register", REGISTER);
+        server.send("POST", "/api/auth/register",
+                "{\"email\":\"other@sru.edu\",\"username\":\"otheruser\",\"password\":\"" + PASSWORD + "\"}");
+        assertEquals(1, TestDatabase.number("SELECT count(*) FROM sessions"));
+        assertEquals("otheruser", server.json(server.get("/api/auth/me")).get("user").get("username").asText());
+    }
+
+    @Test
+    void oversizedLoginInputIsTheUsualGenericError() {
+        // can't be a real account, so it's refused without hashing, but the message gives nothing away
+        server.send("POST", "/api/auth/register", REGISTER);
+        server.clearCookies();
+        HttpResponse<String> wrong = server.send("POST", "/api/auth/login", WRONG);
+        HttpResponse<String> huge = server.send("POST", "/api/auth/login",
+                "{\"email\":\"test@sru.edu\",\"password\":\"" + "a".repeat(PasswordPolicy.MAX_LENGTH + 1) + "\"}");
+        assertEquals(401, huge.statusCode());
+        assertEquals(wrong.body(), huge.body());
+    }
+
+    @Test
+    void missingFieldsAre400() {
+        assertEquals(400, server.send("POST", "/api/auth/login", "{\"email\":\"test@sru.edu\"}").statusCode());
+        assertEquals(400, server.send("POST", "/api/auth/login", "{}").statusCode());
+        assertEquals(400, server.send("POST", "/api/auth/register",
+                "{\"email\":\"not an email\",\"username\":\"testuser\",\"password\":\"" + PASSWORD + "\"}").statusCode());
+        assertEquals(400, server.send("POST", "/api/auth/register",
+                "{\"email\":\"test@sru.edu\",\"username\":\"a b\",\"password\":\"" + PASSWORD + "\"}").statusCode());
+        assertEquals(0, TestDatabase.number("SELECT count(*) FROM users"));
+    }
+
+    @Test
+    void logoutWithoutASessionStillWorks() {
+        assertEquals(204, server.send("POST", "/api/auth/logout", null).statusCode());
+    }
+
+    @Test
     void logoutEndsTheSessionOnTheServer() {
         server.send("POST", "/api/auth/register", REGISTER);
         assertEquals(204, server.send("POST", "/api/auth/logout", null).statusCode());

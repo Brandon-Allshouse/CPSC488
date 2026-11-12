@@ -6,6 +6,8 @@ import edu.cpsc488.brainfeed.auth.AuthController;
 import edu.cpsc488.brainfeed.auth.User;
 import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -30,11 +32,13 @@ import java.util.stream.Collectors;
  */
 public class FeedController {
 
+    private static final Logger log = LoggerFactory.getLogger(FeedController.class);
+
     static final int PAGE_SIZE = 10;
     // way more than anyone will scroll, and stops requests for page 1,000,000
     static final int MAX_PAGE = 100;
     // Nobody picks 200 topics: "Select all subjects" sends the subjects only (at most 40, see
-    // TopicSuggestions.LIMITS), so anything past this is junk.
+    // TopicFinder.LIMITS), so anything past this is junk.
     static final int MAX_TOPICS_PER_REQUEST = 200;
 
     record InterestsRequest(List<Integer> topicIds) {
@@ -63,16 +67,34 @@ public class FeedController {
     private final TopicRepository topics;
     private final VideoRepository videos;
     private final AuthController auth;
-    private final MissingVideoFetcher fetcher;
+    /**
+     * Starts writing summaries and quizzes for videos about to be shown (see
+     * StudyGenerator.prefetch), so they're ready by the time someone scrolls to them. It enforces
+     * its own limits; the feed just says what it served and to whom.
+     */
+    public interface StudyPrefetcher {
+        void prefetch(List<String> youtubeIds, String ip);
+    }
 
+    private final MissingVideoFetcher fetcher;
+    private final StudyPrefetcher prefetcher;
+
+    /** Without summaries ahead of time, e.g. in tests that don't care about them. */
     public FeedController(TopicRepository topics, VideoRepository videos, AuthController auth,
                           MissingVideoFetcher fetcher) {
+        this(topics, videos, auth, fetcher, (ids, ip) -> { });
+    }
+
+    public FeedController(TopicRepository topics, VideoRepository videos, AuthController auth,
+                          MissingVideoFetcher fetcher, StudyPrefetcher prefetcher) {
         this.topics = topics;
         this.videos = videos;
         this.auth = auth;
         this.fetcher = fetcher;
+        this.prefetcher = prefetcher;
     }
 
+    /** Adds the topic, interest, feedback and feed routes. */
     public void register(RoutesConfig routes) {
         routes.get("/api/topics", this::handleTopics);
         routes.get("/api/me/interests", this::handleGetInterests);
@@ -134,7 +156,18 @@ public class FeedController {
         List<Video> found = videos.page(topicIds, query.seed(), query.page() * PAGE_SIZE, PAGE_SIZE + 1);
         // only on the first page: that is where a new pick shows up, and scrolling shouldn't re-check
         boolean fetching = query.page() == 0 && fetcher.fetchMissing(topicIds);
-        ctx.json(toPage(found, query.page(), fetching));
+        FeedPage page = toPage(found, query.page(), fetching);
+        prefetchStudy(page.videos(), ctx.ip());
+        ctx.json(page);
+    }
+
+    // Summaries are extra: if lining them up fails (say the database hiccups), the feed still loads.
+    private void prefetchStudy(List<Video> shown, String ip) {
+        try {
+            prefetcher.prefetch(shown.stream().map(Video::youtubeId).toList(), ip);
+        } catch (RuntimeException e) {
+            log.warn("Couldn't line up summaries for a feed page", e);
+        }
     }
 
     /** Reads the feed's query parameters. Throws a 400 if anything is missing or not a number. */
@@ -170,6 +203,10 @@ public class FeedController {
         if (ids == null || ids.isEmpty() || ids.stream().anyMatch(Objects::isNull)) {
             throw ApiException.badRequest("Pick at least one topic.");
         }
+        // Same cap as the feed, so saving interests can't be used to send thousands of ids either.
+        if (ids.size() > MAX_TOPICS_PER_REQUEST) {
+            throw ApiException.badRequest("Too many topics.");
+        }
         Set<Integer> unique = new LinkedHashSet<>(ids);
         if (!validIds.containsAll(unique)) {
             throw ApiException.badRequest("Unknown topic.");
@@ -192,6 +229,10 @@ public class FeedController {
         return auth.currentUser(ctx).orElseThrow(() -> ApiException.unauthorized("Not logged in."));
     }
 
+    /**
+     * Returns the id if it looks like a YouTube video id, otherwise throws a 400. Shared by every
+     * controller that takes one.
+     */
     public static String checkYoutubeId(String youtubeId) {
         if (youtubeId == null || !YouTubeClient.VIDEO_ID.matcher(youtubeId).matches()) {
             throw ApiException.badRequest("Invalid video id.");

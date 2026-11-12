@@ -138,6 +138,8 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
   const [playlistsError, setPlaylistsError] = useState<string | null>(null);
   // Which screen is showing. FeedPage stays mounted, so the loaded videos are still there on the way back.
   const [view, setView] = useState<'feed' | 'liked' | 'history' | 'leaderboard' | 'admin'>('feed');
+  // Set when Your videos was opened from a "Study notebook" link, so it scrolls to the notebook.
+  const [focusNotebook, setFocusNotebook] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -251,12 +253,12 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
       await addToPlaylist(playlist.id, youtubeId);
     });
 
+  // Throws on failure (except an expired session) so the video's own card can show the message.
   async function changeVideoFeedback(youtubeId: string, feedback: VideoFeedback | null) {
     if (!user) {
       onLogout();
       return;
     }
-    setFeedbackError(null);
     try {
       await saveMyVideoFeedback(youtubeId, feedback);
       feedbackChanges.current[youtubeId] = feedback;
@@ -272,9 +274,9 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLogout();
-      } else {
-        setFeedbackError(err instanceof Error ? err.message : 'Could not save video feedback.');
+        return;
       }
+      throw err;
     }
   }
 
@@ -463,7 +465,8 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
     user,
     onBack: () => setView('feed'),
     onEditInterests,
-    onShowLikedVideos: () => setView('liked'),
+    onShowLikedVideos: () => { setFocusNotebook(false); setView('liked'); },
+    onShowNotebook: () => { setFocusNotebook(true); setView('liked'); },
     onShowLeaderboard: () => setView('leaderboard'),
     onShowHistory: () => setView('history'),
     onShowAdmin: () => setView('admin'),
@@ -474,6 +477,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
     return (
       <YourVideosPage
         {...navigation}
+        focusNotebook={focusNotebook}
         onOpenVideo={openSavedVideo}
         onRemoveNotebookVideo={removeNotebookVideo}
         playlists={playlists}
@@ -495,6 +499,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
         onGoHome={scrollToTop}
         onEditInterests={onEditInterests}
         onShowLikedVideos={navigation.onShowLikedVideos}
+        onShowNotebook={navigation.onShowNotebook}
         onShowLeaderboard={navigation.onShowLeaderboard}
         onShowHistory={navigation.onShowHistory}
         onShowAdmin={navigation.onShowAdmin}
@@ -508,6 +513,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
           onGoHome={scrollToTop}
           onEditInterests={onEditInterests}
           onShowLikedVideos={navigation.onShowLikedVideos}
+          onShowNotebook={navigation.onShowNotebook}
           onShowHistory={navigation.onShowHistory}
           onShowLeaderboard={navigation.onShowLeaderboard}
           onShowAdmin={navigation.onShowAdmin}
@@ -553,6 +559,7 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
                 playlists={playlists ?? undefined}
                 onTogglePlaylist={togglePlaylistSaved}
                 onCreatePlaylist={createPlaylistAndSave}
+                onShowLeaderboard={navigation.onShowLeaderboard}
               />
             ))}
 

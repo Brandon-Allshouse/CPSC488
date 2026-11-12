@@ -150,6 +150,51 @@ class ClientIpTest {
     }
 
     @Test
+    void aSingleAddressIsAnExactMatch() {
+        ClientIp.Range one = ClientIp.parseRange("172.23.0.3");
+        assertTrue(one.contains(ClientIp.parseIp("172.23.0.3")));
+        assertFalse(one.contains(ClientIp.parseIp("172.23.0.4")));
+    }
+
+    @Test
+    void ipv6RangesWork() {
+        ClientIp.Range range = ClientIp.parseRange("2001:db8::/32");
+        assertTrue(range.contains(ClientIp.parseIp("2001:db8:ffff::1")));
+        assertFalse(range.contains(ClientIp.parseIp("2001:db9::1")));
+        // an IPv4 address is never inside an IPv6 range
+        assertFalse(range.contains(ClientIp.parseIp("10.0.0.1")));
+    }
+
+    @Test
+    void aSlashZeroRangeTrustsEveryAddressOfThatKind() {
+        // allowed, but it means anyone can set X-Forwarded-For, so only use it on a closed network
+        ClientIp.Range everything = ClientIp.parseRange("0.0.0.0/0");
+        assertTrue(everything.contains(ClientIp.parseIp("203.0.113.7")));
+        assertFalse(everything.contains(ClientIp.parseIp("::1")));
+    }
+
+    @Test
+    void aConnectionAddressThatIsntAnIpIsPassedThrough() {
+        // Jetty should never give us one, but if it does we mustn't trust the header
+        ClientIp ip = new ClientIp(PROXY);
+        assertEquals("unknown", ip.resolve("unknown", "198.51.100.20"));
+        assertNull(ip.resolve(null, "198.51.100.20"));
+    }
+
+    @Test
+    void reallyLongValuesArentParsed() {
+        // the longest real IPv6 address is 45 characters (47 with brackets)
+        assertNull(ClientIp.parseIp("1".repeat(48)));
+        assertNull(ClientIp.normalize(null));
+    }
+
+    @Test
+    void blankAndMissingSettingsTrustNobody() {
+        assertEquals("203.0.113.7", new ClientIp(null).resolve("203.0.113.7", "198.51.100.1"));
+        assertEquals("203.0.113.7", new ClientIp(" , ").resolve("203.0.113.7", "198.51.100.1"));
+    }
+
+    @Test
     void rejectsBadSettings() {
         assertNull(ClientIp.parseRange("10.0.0.0/33"));
         assertNull(ClientIp.parseRange("10.0.0.0/x"));

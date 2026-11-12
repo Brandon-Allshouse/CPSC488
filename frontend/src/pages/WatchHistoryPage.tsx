@@ -33,6 +33,7 @@ export function timeAgo(date: string, now = Date.now()) {
   return 'just now';
 }
 
+/** Watch history: the videos the user pressed play on, newest first, grouped by day, with remove and clear. */
 export default function WatchHistoryPage({ onOpenVideo, ...navigation }: Props) {
   const { user, onLogout } = navigation;
   const [videos, setVideos] = useState<WatchedVideo[]>([]);

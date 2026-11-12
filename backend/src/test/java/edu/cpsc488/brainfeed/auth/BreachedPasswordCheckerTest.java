@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // These only test reading Have I Been Pwned's response, so they don't call the internet.
@@ -35,6 +36,17 @@ class BreachedPasswordCheckerTest {
     void paddingLinesDontCount() {
         // the API adds fake lines with a count of 0 so nobody watching can tell how many real matches there were
         assertFalse(BreachedPasswordChecker.foundInRange("ABCDEF:0", "ABCDEF"));
+    }
+
+    @Test
+    void linesWithoutACountAreSkipped() {
+        assertFalse(BreachedPasswordChecker.foundInRange("ABCDEF\nnot a line\n", "ABCDEF"));
+    }
+
+    @Test
+    void aGarbledCountIsAnError() {
+        // test() catches this and skips the check (fails open), it doesn't crash the sign-up
+        assertThrows(NumberFormatException.class, () -> BreachedPasswordChecker.foundInRange("ABCDEF:lots", "ABCDEF"));
     }
 
     @Test

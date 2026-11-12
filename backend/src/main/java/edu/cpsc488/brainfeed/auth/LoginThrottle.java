@@ -35,6 +35,7 @@ public class LoginThrottle {
         this.window = window;
     }
 
+    /** How long failures are counted for, which is also how long a block lasts at most. */
     public Duration window() {
         return window;
     }

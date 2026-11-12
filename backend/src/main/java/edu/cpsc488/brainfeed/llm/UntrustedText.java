@@ -50,14 +50,22 @@ public final class UntrustedText {
         return SPACES.matcher(cleaned).replaceAll(" ").strip();
     }
 
-    // Some models (Qwen 3, DeepSeek) can put their reasoning in <think>...</think> before the JSON.
-    // We turn thinking off in the request, but strip it in case a model ignores that.
+    /**
+     * Drops a {@code <think>...</think>} block from the start of a reply. Some models (Qwen 3,
+     * DeepSeek) write their reasoning there before the JSON. We turn thinking off in the request,
+     * but strip it in case a model ignores that.
+     */
     public static String stripThinking(String text) {
         int end = text.lastIndexOf("</think>");
         return end >= 0 ? text.substring(end + "</think>".length()) : text;
     }
 
+    // Never cuts an emoji in half: a lone surrogate would become a broken character.
     private static String cap(String text, int maxLength) {
-        return text.length() > maxLength ? text.substring(0, maxLength).strip() : text;
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        int end = Character.isHighSurrogate(text.charAt(maxLength - 1)) ? maxLength - 1 : maxLength;
+        return text.substring(0, end).strip();
     }
 }

@@ -88,4 +88,15 @@ describe('parseYoutubeId', () => {
     expect(parseYoutubeId('not a link')).toBeNull();
     expect(parseYoutubeId('')).toBeNull();
   });
+
+  it('rejects javascript: and other non-web links even when the host looks like YouTube', () => {
+    expect(parseYoutubeId('javascript://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(parseYoutubeId('ftp://youtube.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(parseYoutubeId('http://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
+  });
+
+  it('rejects look-alike hosts', () => {
+    expect(parseYoutubeId('https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(parseYoutubeId('https://notyoutube.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+  });
 });

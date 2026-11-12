@@ -16,6 +16,7 @@ export function passwordLength(password: string): number {
   return [...password.normalize('NFKC')].length;
 }
 
+/** The error to show for an email, or null if it looks fine. */
 export function validateEmail(email: string): string | null {
   const trimmed = email.trim();
   if (!trimmed) return 'Email is required.';
@@ -23,6 +24,7 @@ export function validateEmail(email: string): string | null {
   return null;
 }
 
+/** The error to show for a username, or null if it's 3-30 letters, numbers or underscores. */
 export function validateUsername(username: string): string | null {
   if (!USERNAME.test(username.trim())) {
     return 'Username must be 3-30 characters: letters, numbers, or underscores.';
@@ -30,6 +32,7 @@ export function validateUsername(username: string): string | null {
   return null;
 }
 
+/** The error to show for a new password (sign up only), or null if its length is allowed. */
 export function validateNewPassword(password: string): string | null {
   const length = passwordLength(password);
   if (length < MIN_PASSWORD) {
@@ -56,6 +59,8 @@ export function parseYoutubeId(input: string): string | null {
   } catch {
     return null;
   }
+  // Only real web links. javascript:// and other schemes can still have a youtube.com "host".
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
   if (!YOUTUBE_HOSTS.includes(url.hostname.toLowerCase())) return null;
 
   const fromQuery = url.searchParams.get('v');

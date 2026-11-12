@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Fills the videos table from YouTube, in two ways:
@@ -62,6 +63,7 @@ public class FeedRefresher implements Runnable, FeedController.MissingVideoFetch
     }
 
     @Override
+    /** The hourly refresh: re-searches a few topics that are due, within the daily budget. */
     public void run() {
         // Catch everything here. If a scheduled task throws, Java quietly stops running it.
         try {
@@ -98,7 +100,14 @@ public class FeedRefresher implements Runnable, FeedController.MissingVideoFetch
             }
         }
         if (!batch.isEmpty()) {
-            executor.execute(() -> fetchBatch(batch));
+            try {
+                executor.execute(() -> fetchBatch(batch));
+            } catch (RejectedExecutionException e) {
+                // The worker is shutting down. Un-queue them, or they'd look "being fetched" forever.
+                batch.forEach(topic -> queued.remove(topic.id()));
+                log.warn("Couldn't start fetching videos for new topics: the worker is shut down");
+                return alreadyQueued;
+            }
         }
         return alreadyQueued || !batch.isEmpty();
     }

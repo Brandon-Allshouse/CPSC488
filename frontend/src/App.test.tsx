@@ -137,4 +137,41 @@ describe('App', () => {
     // the new feed is built from both, so there's nothing left to suggest
     await vi.waitFor(() => expect(screen.queryByRole('heading', { name: 'Explore more subjects' })).toBeNull());
   });
+
+  it('shows a loading screen while it checks for a login', () => {
+    vi.mocked(fetchCurrentUser).mockReturnValue(new Promise(() => {}));
+    render(<App />);
+    expect(screen.getByRole('status').textContent).toContain('Loading');
+  });
+
+  it("says so when a user's saved interests could not be loaded, instead of a silent empty picker", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchMyInterests).mockRejectedValue(new Error('down'));
+    render(<App />);
+
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't load your saved interests");
+    expect(await screen.findByRole('button', { name: 'All of Math' })).toBeTruthy();
+  });
+
+  it('still goes back to the login page when the logout request fails', async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchMyInterests).mockResolvedValue([1]);
+    vi.mocked(logout).mockRejectedValue(new Error('down'));
+    render(<App />);
+
+    fireEvent.click(await screen.findByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText('Welcome back')).toBeTruthy();
+  });
+
+  it('shows the error on the picker when saving interests fails', async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(testUser);
+    vi.mocked(fetchMyInterests).mockResolvedValue([]);
+    vi.mocked(saveMyInterests).mockRejectedValue(new Error('Could not save your interests.'));
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'All of History' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save your interests.');
+  });
 });

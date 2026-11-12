@@ -86,6 +86,15 @@ class PasswordHasherTest {
     }
 
     @Test
+    void aChangedHashOrUnknownSettingDoesNotVerify() {
+        String hash = hasher.hash("correct horse battery staple");
+        // an extra setting we don't know about
+        assertFalse(hasher.verify("correct horse battery staple", hash.replace(",p=1$", ",p=1,x=1$")));
+        // the same hash, but with different settings, gives a different result
+        assertFalse(hasher.verify("correct horse battery staple", hash.replace("t=2", "t=3")));
+    }
+
+    @Test
     void pepperTooShortThrows() {
         assertThrows(IllegalArgumentException.class, () -> new PasswordHasher(new byte[16], 1));
     }

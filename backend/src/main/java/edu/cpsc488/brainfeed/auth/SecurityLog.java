@@ -16,6 +16,7 @@ public final class SecurityLog {
     private SecurityLog() {
     }
 
+    /** Logs an action that worked. {@code userId} is null when nobody is logged in. */
     public static void success(String event, Context ctx, Long userId) {
         log.info("event={} outcome=success user={} ip={} ua=\"{}\"",
                 event, userId == null ? "-" : userId, clean(ctx.ip()), clean(ctx.userAgent()));
@@ -27,6 +28,7 @@ public final class SecurityLog {
                 event, userId == null ? "-" : userId, clean(ctx.ip()), clean(detail), clean(ctx.userAgent()));
     }
 
+    /** Logs a refused or failed action, with a short reason (never a password or email). */
     public static void failure(String event, Context ctx, Long userId, String reason) {
         log.warn("event={} outcome=failure user={} ip={} reason=\"{}\" ua=\"{}\"",
                 event, userId == null ? "-" : userId, clean(ctx.ip()), clean(reason), clean(ctx.userAgent()));
