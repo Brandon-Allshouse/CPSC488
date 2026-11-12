@@ -6,11 +6,13 @@ import { fetchMyVideoFeedback } from '../api/feed';
 import type { Playlist } from '../api/playlists';
 import { fetchSavedVideos } from '../api/savedVideos';
 import { fetchStudyNotes } from '../api/studyNotes';
+import { fetchLearningProgress } from '../api/learningProgress';
 import YourVideosPage from './YourVideosPage';
 
 vi.mock('../api/feed', () => ({ fetchMyVideoFeedback: vi.fn() }));
 vi.mock('../api/savedVideos', () => ({ fetchSavedVideos: vi.fn() }));
 vi.mock('../api/studyNotes', () => ({ fetchStudyNotes: vi.fn(), saveStudyNote: vi.fn() }));
+vi.mock('../api/learningProgress', () => ({ fetchLearningProgress: vi.fn(), setLearningStatus: vi.fn(), markLearningReviewed: vi.fn(), downloadLearningProgress: vi.fn() }));
 
 const testUser = { id: 1, email: 'test@sru.edu', username: 'testuser', createdAt: '2026-10-05T00:00:00Z', admin: false };
 const handlers = {
@@ -45,6 +47,7 @@ beforeEach(() => {
   vi.mocked(fetchMyVideoFeedback).mockReset().mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
   vi.mocked(fetchSavedVideos).mockReset().mockResolvedValue([]);
   vi.mocked(fetchStudyNotes).mockReset().mockResolvedValue([]);
+  vi.mocked(fetchLearningProgress).mockReset().mockResolvedValue({ items: [], summary: { total: 0, planned: 0, inProgress: 0, completed: 0, dueForReview: 0, completionPercent: 0 }, reviewIntervalDays: 7 });
   handlers.onRemoveNotebookVideo.mockReset().mockResolvedValue(undefined);
   handlers.onCreatePlaylist.mockResolvedValue(undefined);
   handlers.onDeletePlaylist.mockResolvedValue(undefined);
@@ -57,17 +60,33 @@ afterEach(() => {
 });
 
 describe('YourVideosPage', () => {
-  it('shows three tabs and starts on Saved', async () => {
+  it('shows four tabs for a signed-in user and starts on Saved', async () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
     renderPage();
 
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent?.replace(/\s*\(\d+\)/, ''))).toEqual([
       'Saved',
+      'Learning progress',
       'Liked',
       'Disliked',
     ]);
     expect(screen.getByRole('tab', { name: /^Saved/ }).getAttribute('aria-selected')).toBe('true');
     expect(await screen.findByRole('heading', { name: 'Watch later' })).toBeTruthy();
+  });
+
+  it('opens learning progress without changing saved playlists', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'Learning progress' }));
+    expect(await screen.findByText(/Your learning plan is empty/)).toBeTruthy();
+    expect(fetchLearningProgress).toHaveBeenCalledOnce();
+    expect(handlers.onRemoveNotebookVideo).not.toHaveBeenCalled();
+    expect(handlers.onDeletePlaylist).not.toHaveBeenCalled();
+  });
+
+  it('does not offer private learning progress to guests', () => {
+    renderPage(null);
+    expect(screen.queryByRole('tab', { name: 'Learning progress' })).toBeNull();
+    expect(fetchLearningProgress).not.toHaveBeenCalled();
   });
 
   // ---- Saved (playlists) ----

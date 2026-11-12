@@ -28,6 +28,9 @@ import edu.cpsc488.brainfeed.saved.SavedVideoController;
 import edu.cpsc488.brainfeed.saved.SavedVideoRepository;
 import edu.cpsc488.brainfeed.saved.StudyNoteController;
 import edu.cpsc488.brainfeed.saved.StudyNoteRepository;
+import edu.cpsc488.brainfeed.learning.LearningProgressController;
+import edu.cpsc488.brainfeed.learning.LearningProgressRepository;
+import edu.cpsc488.brainfeed.learning.LearningProgressService;
 import edu.cpsc488.brainfeed.history.WatchHistoryController;
 import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
 import edu.cpsc488.brainfeed.llm.Llm;
@@ -133,6 +136,8 @@ public class App {
         SavedVideoRepository savedVideos = new SavedVideoRepository(dataSource);
         SavedVideoController savedVideoController = new SavedVideoController(savedVideos, auth);
         StudyNoteController studyNotes = new StudyNoteController(new StudyNoteRepository(dataSource), auth);
+        LearningProgressController learningProgress = new LearningProgressController(
+                new LearningProgressService(new LearningProgressRepository(dataSource)), auth);
         
         // Optional: without a key the app still runs, but no new videos are fetched.
         String youtubeKey = settings.get("YOUTUBE_API_KEY", null);
@@ -189,6 +194,7 @@ public class App {
             feed.register(config.routes);
             savedVideoController.register(config.routes);
             studyNotes.register(config.routes);
+            learningProgress.register(config.routes);
             admin.register(config.routes);
             exports.register(config.routes);
             history.register(config.routes);

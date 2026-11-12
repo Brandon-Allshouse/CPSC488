@@ -1,8 +1,12 @@
 package edu.cpsc488.brainfeed;
 
+import io.javalin.http.ContentTooLargeResponse;
 import io.javalin.http.Context;
+import io.javalin.http.HttpResponseException;
+import io.javalin.http.servlet.MaxRequestSize;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.Proxy;
 import java.util.function.Supplier;
 
@@ -59,6 +63,31 @@ class RequestBodiesTest {
     void anApiExceptionFromParsingIsPassedOnUnchanged() {
         ApiException original = ApiException.unsupportedMediaType("Send JSON.");
         ApiException e = assertThrows(ApiException.class, () -> RequestBodies.parse(
+                contextWhere(() -> {
+                    throw original;
+                }),
+                Body.class));
+        assertSame(original, e);
+    }
+
+    @Test
+    void anOversizedBodyKeepsIts413Response() {
+        ContentTooLargeResponse original = new ContentTooLargeResponse();
+        ContentTooLargeResponse e = assertThrows(ContentTooLargeResponse.class, () -> RequestBodies.parse(
+                contextWhere(() -> {
+                    throw original;
+                }),
+                Body.class));
+        assertSame(original, e);
+    }
+
+    @Test
+    void theFrameworkSizeLimiterKeepsIts413Response() {
+        HttpResponseException original = assertThrows(HttpResponseException.class,
+                () -> MaxRequestSize.INSTANCE.readBytesWithLimit(
+                        new ByteArrayInputStream(new byte[16_385]), 16_384L));
+        assertEquals(413, original.getStatus());
+        HttpResponseException e = assertThrows(HttpResponseException.class, () -> RequestBodies.parse(
                 contextWhere(() -> {
                     throw original;
                 }),
