@@ -15,9 +15,9 @@
         <!-- Where Maven builds to. Override with -Dbrainfeed.buildDir=target-x so two test runs at once
              don't overwrite each other's compiled classes. -->
         <brainfeed.buildDir>${project.basedir}/target</brainfeed.buildDir>
-        <javalin.version>7.2.3</javalin.version>
-        <jackson.version>2.22.3</jackson.version>
-        <flyway.version>13.8.0</flyway.version>
+        <javalin.version>7.2.4</javalin.version>
+        <jackson.version>2.23.0</jackson.version>
+        <flyway.version>13.12.1</flyway.version>
     </properties>
 
     <dependencies>
@@ -49,7 +49,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <version>42.7.13</version>
+            <version>42.7.14</version>
         </dependency>
         <dependency>
             <groupId>com.zaxxer</groupId>
@@ -89,7 +89,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.6.1</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
