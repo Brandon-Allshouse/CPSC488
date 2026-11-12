@@ -50,6 +50,9 @@ services:
       OLLAMA_URL: http://ollama:11434
       # Same default as ollama-pull below, so the backend asks for the model that was downloaded.
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e4b}
+      # Keeps the security log file (logs/security.log) across restarts and rebuilds.
+    volumes:
+      - backend-logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -186,6 +189,7 @@ networks:
 
 volumes:
   brainfeed-pgdata:
+  backend-logs:
   frontend-node-modules:
   maven-cache:
   pgadmin-data:

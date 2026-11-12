@@ -20,6 +20,9 @@ FROM eclipse-temurin:25-jre
 # Run as an unprivileged user rather than root, so a bug in the app can't take over the container.
 RUN useradd --system --create-home app
 WORKDIR /app
+# The security log file goes here (see SecurityLogFile). The app user can write to this folder
+# only, not the rest of /app.
+RUN mkdir logs && chown app:app logs
 COPY --from=build /app/target/classes ./classes
 COPY --from=build /app/target/lib ./lib
 USER app

@@ -8,6 +8,7 @@ import {
   fetchAdminStats,
   fetchAiTopics,
   fetchBannedVideos,
+  fetchSecurityLog,
   removeAiTopic,
   searchUsers,
   searchVideos,
@@ -30,6 +31,7 @@ vi.mock('../api/admin', () => ({
   fetchAdminActions: vi.fn(),
   fetchAiTopics: vi.fn(),
   removeAiTopic: vi.fn(),
+  fetchSecurityLog:  vi.fn(),
 }));
 
 const adminUser = { id: 1, email: 'admin@sru.edu', username: 'testadmin', createdAt: '2026-10-05T00:00:00Z', admin: true };
@@ -70,6 +72,7 @@ function usersTable() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(fetchSecurityLog).mockResolvedValue([]);
   vi.mocked(fetchAdminStats).mockResolvedValue({ users: 3, bannedUsers: 0, admins: 1, videos: 12, bannedVideos: 1 });
   vi.mocked(searchUsers).mockResolvedValue([
     userRow({ id: 1, username: 'testadmin', email: 'admin@sru.edu', admin: true }),

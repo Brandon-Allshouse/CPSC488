@@ -12,6 +12,7 @@ import edu.cpsc488.brainfeed.auth.BreachedPasswordChecker;
 import edu.cpsc488.brainfeed.auth.PasswordHasher;
 import edu.cpsc488.brainfeed.auth.PasswordPolicy;
 import edu.cpsc488.brainfeed.auth.SecurityLog;
+import edu.cpsc488.brainfeed.auth.SecurityLogFile;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.Database;
@@ -45,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
@@ -101,6 +103,11 @@ public class App {
         // ClientIp). Blank means nothing sits in front of the backend.
         ClientIp clientIp = new ClientIp(settings.get("TRUSTED_PROXIES", ""));
 
+        // Security events also go to this file so admins can read them on the admin page. Once it
+        // reaches 5 MB it's renamed to security.log.1 and a new one is started.
+        SecurityLogFile securityLogFile = new SecurityLogFile(
+                Path.of(settings.get("SECURITY_LOG_FILE", "logs/security.log")), 5_000_000);
+        SecurityLog.writeTo(securityLogFile);
         HikariDataSource dataSource = Database.connect(dbUrl, dbUser, dbPassword);
         Database.migrate(dataSource);
 
@@ -146,7 +153,7 @@ public class App {
         StudyController study = new StudyController(studyGenerator(llm, youtubeKey, dataSource));
         TopicSuggestionController topicFinder = new TopicSuggestionController(
                 new TopicSuggestions(new AiTopicRepository(dataSource), llm), auth);
-        AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
+        AdminController admin = new AdminController(new AdminRepository(dataSource), auth, securityLogFile);
         WatchHistoryController history = new WatchHistoryController(
                 new WatchHistoryRepository(dataSource, WatchHistoryController.LIMIT), auth);
         PlaylistController playlists = new PlaylistController(new PlaylistRepository(dataSource), auth);

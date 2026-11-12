@@ -4,11 +4,13 @@ import edu.cpsc488.brainfeed.ApiException;
 import edu.cpsc488.brainfeed.RequestBodies;
 import edu.cpsc488.brainfeed.auth.AuthController;
 import edu.cpsc488.brainfeed.auth.SecurityLog;
+import edu.cpsc488.brainfeed.auth.SecurityLogFile;
 import edu.cpsc488.brainfeed.auth.User;
 import edu.cpsc488.brainfeed.feed.FeedController;
 import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -26,6 +28,8 @@ public class AdminController {
     static final int MAX_SEARCH = 100;
     static final int SEARCH_LIMIT = 50;
     static final int LIST_LIMIT = 200;
+    static final int SECURITY_LOG_DEFAULT = 100;
+    static final int SECURITY_LOG_MAX = 500;
 
     private static final String ADMIN_ATTRIBUTE = "brainfeed.admin";
 
@@ -34,10 +38,17 @@ public class AdminController {
 
     private final AdminRepository admins;
     private final AuthController auth;
+    // The security log file (logins, failed logins, bans...); null when there isn't one, e.g. in tests.
+    private final SecurityLogFile securityLog;
 
     public AdminController(AdminRepository admins, AuthController auth) {
+        this(admins, auth, null);
+    }
+
+    public AdminController(AdminRepository admins, AuthController auth, SecurityLogFile securityLog) {
         this.admins = admins;
         this.auth = auth;
+        this.securityLog = securityLog;
     }
 
     public void register(RoutesConfig routes) {
@@ -51,6 +62,7 @@ public class AdminController {
         routes.put("/api/admin/banned-videos/{youtubeId}", this::handleBanVideo);
         routes.delete("/api/admin/banned-videos/{youtubeId}", this::handleUnbanVideo);
         routes.get("/api/admin/actions", this::handleActions);
+        routes.get("/api/admin/security-log", this::handleSecurityLog);
         routes.get("/api/admin/topics", this::handleAiTopics);
         routes.delete("/api/admin/topics/{id}", this::handleRemoveTopic);
     }
@@ -171,6 +183,32 @@ public class AdminController {
     private void handleActions(Context ctx) {
         admin(ctx);
         ctx.json(Map.of("actions", admins.recentActions(SEARCH_LIMIT)));
+    }
+    
+    /**
+     * GET /api/admin/security-log?limit=100 — the newest entries of the security log file
+     * (logins, failed logins, admin actions, denied admin access), newest first.
+     */
+    private void handleSecurityLog(Context ctx) {
+        admin(ctx);
+        int limit = parseLimit(ctx.queryParam("limit"));
+        ctx.json(Map.of("events", securityLog == null ? List.of() : securityLog.readRecent(limit)));
+    }
+
+    /** The ?limit= value: 100 when missing, at most 500, and a whole number from 1 up. */
+    static int parseLimit(String value) {
+        if (value == null || value.isBlank()) {
+            return SECURITY_LOG_DEFAULT;
+        }
+        try {
+            int limit = Integer.parseInt(value.trim());
+            if (limit >= 1) {
+                return Math.min(limit, SECURITY_LOG_MAX);
+            }
+        } catch (NumberFormatException e) {
+            // falls through to the error below
+        }
+        throw ApiException.badRequest("limit must be a whole number from 1 to " + SECURITY_LOG_MAX + ".");
     }
 
     /**

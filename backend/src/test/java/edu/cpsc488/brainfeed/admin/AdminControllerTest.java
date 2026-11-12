@@ -115,4 +115,20 @@ class AdminControllerTest {
     void searchCantBeTooLong() {
         assertBadRequest(() -> AdminController.likePattern("a".repeat(101)));
     }
+    
+    @Test
+    void securityLogLimitDefaultsTo100AndIsCappedAt500() {
+        assertEquals(100, AdminController.parseLimit(null));
+        assertEquals(100, AdminController.parseLimit(" "));
+        assertEquals(25, AdminController.parseLimit("25"));
+        assertEquals(500, AdminController.parseLimit("100000"));
+    }
+
+    @Test
+    void securityLogLimitMustBeAPositiveWholeNumber() {
+        for (String bad : new String[]{"0", "-3", "abc", "1.5"}) {
+            ApiException e = assertThrows(ApiException.class, () -> AdminController.parseLimit(bad));
+            assertEquals(400, e.status());
+        }
+    }
 }
