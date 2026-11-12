@@ -6,6 +6,7 @@ import type { Playlist } from '../api/playlists';
 import { fetchSavedVideos } from '../api/savedVideos';
 import StatTile from '../components/StatTile';
 import StudyNotebook from '../components/StudyNotebook';
+import LearningProgressPanel from '../components/LearningProgressPanel';
 import PageLayout, { type PageNavigation } from '@/components/layout/PageLayout';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
-type Tab = 'saved' | 'liked' | 'disliked';
+type Tab = 'saved' | 'progress' | 'liked' | 'disliked';
 
 interface Props extends PageNavigation {
   /** Opened from a "Study notebook" link: scroll to the notebook once it has loaded. */
@@ -400,6 +401,7 @@ export default function YourVideosPage({
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'saved', label: 'Saved', count: savedCount },
+    ...(user ? [{ key: 'progress' as const, label: 'Learning progress' }] : []),
     { key: 'liked', label: 'Liked', count: feedback?.likedVideos.length },
     { key: 'disliked', label: 'Disliked', count: feedback?.dislikedVideos.length },
   ];
@@ -450,6 +452,7 @@ export default function YourVideosPage({
       </div>
       <div id="your-videos-panel" role="tabpanel" aria-labelledby={`your-videos-tab-${tab}`} className="flex flex-col gap-4">
         {tab === 'saved' && savedTab()}
+        {tab === 'progress' && user && <LearningProgressPanel key={user.id} onOpenVideo={onOpenVideo} onSessionExpired={onLogout} />}
         {tab === 'liked' && feedbackSection('liked')}
         {tab === 'disliked' && feedbackSection('disliked')}
       </div>

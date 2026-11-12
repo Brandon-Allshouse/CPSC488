@@ -1,6 +1,7 @@
 package edu.cpsc488.brainfeed;
 
 import io.javalin.http.Context;
+import io.javalin.http.HttpResponseException;
 
 /** Shared helper for reading JSON request bodies in controllers. */
 public final class RequestBodies {
@@ -19,7 +20,7 @@ public final class RequestBodies {
                 throw ApiException.badRequest("Request body is required.");
             }
             return body;
-        } catch (ApiException e) {
+        } catch (ApiException | HttpResponseException e) {
             throw e;
         } catch (Exception e) {
             throw ApiException.badRequest("Malformed request body.");
