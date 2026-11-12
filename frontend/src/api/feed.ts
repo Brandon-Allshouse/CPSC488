@@ -9,7 +9,7 @@ export interface Topic {
   id: number;
   name: string;
   parentId: number | null;
-  /** true if a user added it with the AI topic finder. The name came from the LLM: plain text only. */
+  /** true if a user added it with the topic finder. The name was typed by a user: plain text only. */
   ai?: boolean;
 }
 

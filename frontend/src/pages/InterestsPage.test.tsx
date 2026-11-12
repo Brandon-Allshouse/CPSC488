@@ -2,11 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchTopics } from '../api/feed';
-import { addSuggestedTopic, suggestTopics } from '../api/topics';
+import { addTopic } from '../api/topics';
 import InterestsPage from './InterestsPage';
 
 vi.mock('../api/feed', () => ({ fetchTopics: vi.fn() }));
-vi.mock('../api/topics', () => ({ suggestTopics: vi.fn(), addSuggestedTopic: vi.fn() }));
+vi.mock('../api/topics', () => ({ addTopic: vi.fn() }));
 
 const topics = [
   { id: 1, name: 'Math', parentId: null },
@@ -24,6 +24,10 @@ afterEach(() => {
   cleanup();
 });
 
+function topicBox() {
+  return screen.getByRole('combobox', { name: 'Type a topic' });
+}
+
 function chip(name: string) {
   return screen.getByRole('button', { name });
 }
@@ -34,11 +38,11 @@ describe('InterestsPage', () => {
     expect(screen.getByRole('img', { name: 'BrainFeed brain logo' }).classList.contains('auth-logo')).toBe(true);
   });
 
-  it('narrows the subjects down with the search box', async () => {
+  it('narrows the subjects down as you type in the topic box', async () => {
     const { container } = render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     await screen.findByRole('button', { name: 'All of Math' });
 
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'ALGEBRA' } });
+    fireEvent.change(topicBox(), { target: { value: 'ALGEBRA' } });
     // Math stays because Algebra 2 is part of it, and it opens so Algebra 2 can be seen
     const shown = [...container.querySelectorAll('details.subject')];
     expect(shown).toHaveLength(1);
@@ -50,16 +54,16 @@ describe('InterestsPage', () => {
   it('keeps picks made before searching', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     fireEvent.click(await screen.findByRole('button', { name: 'All of History' }));
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'math' } });
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: '' } });
+    fireEvent.change(topicBox(), { target: { value: 'math' } });
+    fireEvent.change(topicBox(), { target: { value: '' } });
     expect(screen.getByRole('button', { name: 'All of History' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('says when nothing matches the search', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     await screen.findByRole('button', { name: 'All of Math' });
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search subjects and topics' }), { target: { value: 'underwater basket weaving' } });
-    expect(screen.getByRole('status').textContent).toContain('Nothing matches');
+    fireEvent.change(topicBox(), { target: { value: 'underwater basket weaving' } });
+    expect(screen.getByText(/We don't have “underwater basket weaving” yet\. Press Enter to add it\./)).toBeTruthy();
   });
 
   it('lists the topics from the backend', async () => {
@@ -220,56 +224,60 @@ describe('InterestsPage', () => {
   it('only shows Select all and the language picker once the topics have loaded', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
     expect(screen.queryByRole('button', { name: 'Select all subjects' })).toBeNull();
-    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Language' })).toBeNull();
     expect(await screen.findByRole('button', { name: 'Select all subjects' })).toBeTruthy();
-    expect(screen.getByRole('combobox')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Language' })).toBeTruthy();
   });
 
-  it('offers the AI topic finder to signed-in users only', async () => {
-    render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
-    expect(await screen.findByRole('heading', { name: 'Find topics with AI' })).toBeTruthy();
-    cleanup();
+  it('guests get the topic box too, but are told new topics need a login', async () => {
     render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest />);
     await screen.findByRole('button', { name: 'All of Math' });
-    expect(screen.queryByRole('heading', { name: 'Find topics with AI' })).toBeNull();
-    expect(screen.getByText(/Log in to find topics with AI/)).toBeTruthy();
+    expect(topicBox()).toBeTruthy();
+    expect(screen.getByText(/Log in to add ones we don’t have yet/)).toBeTruthy();
   });
 
-  it('a topic added with AI shows up in its subject, picked, and gets saved', async () => {
-    vi.mocked(suggestTopics).mockResolvedValue({
-      matches: [],
-      ideas: [{ key: 'key-1', name: 'Matrices', subject: 'Math', newSubject: false }],
+  it('typing a topic we have and pressing Enter picks it and opens its subject', async () => {
+    const { container } = render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
+    await screen.findByRole('button', { name: 'All of Math' });
+    fireEvent.change(topicBox(), { target: { value: 'algebra 2' } });
+    fireEvent.submit(topicBox().closest('form')!);
+    expect(chip('Algebra 2').getAttribute('aria-pressed')).toBe('true');
+    expect((container.querySelector('details') as HTMLDetailsElement).open).toBe(true);
+    expect(addTopic).not.toHaveBeenCalled();
+  });
+
+  it('a new topic shows up in its subject, picked, and gets saved', async () => {
+    vi.mocked(addTopic).mockResolvedValue({
+      topic: { id: 50, name: 'Matrices', parentId: 1, ai: true },
+      created: true,
+      similar: false,
     });
-    vi.mocked(addSuggestedTopic).mockResolvedValue([{ id: 50, name: 'Matrices', parentId: 1, ai: true }]);
     const onSave = vi.fn().mockResolvedValue(undefined);
     render(<InterestsPage initial={[]} onSave={onSave} isGuest={false} />);
-    fireEvent.change(await screen.findByLabelText('What do you want to learn?'), { target: { value: 'matrices' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Find topics' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Add Matrices' }));
+    await screen.findByRole('button', { name: 'All of Math' });
+    fireEvent.change(topicBox(), { target: { value: 'matrices' } });
+    fireEvent.submit(topicBox().closest('form')!);
 
-    // it's in the Math section, marked as added with AI, and already picked
-    const added = await screen.findByRole('button', { name: 'Matrices, added with AI' });
+    // it's in the Math section, marked as added by a user, and already picked
+    const added = await screen.findByRole('button', { name: 'Matrices, added by a user' });
     expect(added.getAttribute('aria-pressed')).toBe('true');
+    expect(added.closest('details')!.querySelector('summary')!.textContent).toContain('Math');
     fireEvent.click(screen.getByRole('button', { name: 'Show my feed' }));
     expect(onSave).toHaveBeenCalledWith([50]);
   });
 
-  it('a new subject from AI gets its own section', async () => {
-    vi.mocked(suggestTopics).mockResolvedValue({
-      matches: [],
-      ideas: [{ key: 'key-2', name: 'Baking Bread', subject: 'Cooking', newSubject: true }],
+  it('the list shows everything again after a topic is added', async () => {
+    vi.mocked(addTopic).mockResolvedValue({
+      topic: { id: 50, name: 'Matrices', parentId: 1, ai: true },
+      created: true,
+      similar: false,
     });
-    vi.mocked(addSuggestedTopic).mockResolvedValue([
-      { id: 60, name: 'Cooking', parentId: null, ai: true },
-      { id: 61, name: 'Baking Bread', parentId: 60, ai: true },
-    ]);
     const { container } = render(<InterestsPage initial={[]} onSave={vi.fn()} isGuest={false} />);
-    fireEvent.change(await screen.findByLabelText('What do you want to learn?'), { target: { value: 'bread' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Find topics' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Add Baking Bread' }));
-    await screen.findByRole('button', { name: 'Baking Bread, added with AI' });
-    const summaries = [...container.querySelectorAll('details.subject summary')].map((el) => el.textContent);
-    expect(summaries.some((text) => text?.startsWith('Cooking'))).toBe(true);
+    await screen.findByRole('button', { name: 'All of Math' });
+    fireEvent.change(topicBox(), { target: { value: 'matrices' } });
+    fireEvent.submit(topicBox().closest('form')!);
+    await screen.findByRole('button', { name: 'Matrices, added by a user' });
+    expect(container.querySelectorAll('details.subject')).toHaveLength(3);
   });
 });
 

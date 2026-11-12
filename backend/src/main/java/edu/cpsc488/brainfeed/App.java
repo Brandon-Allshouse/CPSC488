@@ -31,12 +31,16 @@ import edu.cpsc488.brainfeed.history.WatchHistoryController;
 import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
 import edu.cpsc488.brainfeed.llm.Llm;
 import edu.cpsc488.brainfeed.llm.OllamaClient;
+import edu.cpsc488.brainfeed.progress.LeaderboardController;
+import edu.cpsc488.brainfeed.progress.LeaderboardRepository;
+import edu.cpsc488.brainfeed.progress.QuizAttemptRepository;
 import edu.cpsc488.brainfeed.study.StudyController;
 import edu.cpsc488.brainfeed.study.StudyGenerator;
 import edu.cpsc488.brainfeed.study.StudyRepository;
 import edu.cpsc488.brainfeed.topics.AiTopicRepository;
-import edu.cpsc488.brainfeed.topics.TopicSuggestionController;
-import edu.cpsc488.brainfeed.topics.TopicSuggestions;
+import edu.cpsc488.brainfeed.topics.TopicFinder;
+import edu.cpsc488.brainfeed.topics.TopicFinderController;
+import edu.cpsc488.brainfeed.topics.TopicReviewer;
 import io.javalin.Javalin;
 import io.javalin.config.JavalinConfig;
 import io.javalin.http.Context;
@@ -141,12 +145,26 @@ public class App {
             scheduler.scheduleWithFixedDelay(refresher, 0, 1, TimeUnit.HOURS);
             fetcher = refresher;
         }
-        FeedController feed = new FeedController(topics, videos, auth, fetcher);
-        // One model client for summaries and the topic finder; null when OLLAMA_URL isn't set.
+        // One model client for summaries and topic reviews; null when OLLAMA_URL isn't set.
         Llm llm = llm(settings);
-        StudyController study = new StudyController(studyGenerator(llm, youtubeKey, dataSource));
-        TopicSuggestionController topicFinder = new TopicSuggestionController(
-                new TopicSuggestions(new AiTopicRepository(dataSource), llm), auth);
+        StudyGenerator studyGenerator = studyGenerator(llm, youtubeKey, dataSource);
+        // Serving a feed page lines up summaries for its first videos (StudyGenerator.prefetch).
+        FeedController feed = new FeedController(topics, videos, auth, fetcher, studyGenerator::prefetch);
+        // The repository is a thin wrapper over the pool, so the answer checks get their own copy.
+        StudyController study = new StudyController(studyGenerator,
+                new StudyRepository(dataSource), auth, new QuizAttemptRepository(dataSource));
+        LeaderboardController leaderboard = new LeaderboardController(new LeaderboardRepository(dataSource), auth);
+        // Typed topics are added instantly; the model reviews each one afterwards on its own thread
+        // (moves it, improves its search, removes harmful ones). See topics/TopicFinder.
+        AiTopicRepository aiTopics = new AiTopicRepository(dataSource);
+        ExecutorService reviewWorker = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "topic-reviewer");
+            thread.setDaemon(true);
+            return thread;
+        });
+        TopicReviewer reviewer = new TopicReviewer(aiTopics, llm, reviewWorker);
+        reviewer.queueWaiting();
+        TopicFinderController topicFinder = new TopicFinderController(new TopicFinder(aiTopics), reviewer, fetcher, auth);
         AdminRepository adminRepository = new AdminRepository(dataSource);
         AdminController admin = new AdminController(adminRepository, auth);
         ExportController exports = new ExportController(adminRepository, auth);
@@ -169,11 +187,13 @@ public class App {
             history.register(config.routes);
             playlists.register(config.routes);
             study.register(config.routes);
+            leaderboard.register(config.routes);
             topicFinder.register(config.routes);
         });
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             scheduler.shutdownNow();
+            reviewWorker.shutdownNow();
             app.stop();
             dataSource.close();
         }));
@@ -182,7 +202,7 @@ public class App {
     }
 
     /**
-     * The free model running in Ollama, used for video summaries and the AI topic finder. Without
+     * The free model running in Ollama, used for video summaries and reviewing new topics. Without
      * OLLAMA_URL the app still runs: saved summaries are shown, but nothing new is written.
      */
     private static Llm llm(Config settings) {
@@ -192,13 +212,13 @@ public class App {
             throw new IllegalStateException("OLLAMA_MODEL must be an Ollama model name like gemma4:e4b.");
         }
         if (ollamaUrl == null) {
-            log.warn("OLLAMA_URL is not set, so video summaries and the AI topic finder are off. See .env.example.");
+            log.warn("OLLAMA_URL is not set, so video summaries and AI reviews of new topics are off. See .env.example.");
             return null;
         }
         if (!ollamaUrl.startsWith("http://") && !ollamaUrl.startsWith("https://")) {
             throw new IllegalStateException("OLLAMA_URL must start with http:// or https://.");
         }
-        log.info("Video summaries and the topic finder use {} at {}", model, ollamaUrl);
+        log.info("Video summaries and topic reviews use {} at {}", model, ollamaUrl);
         return new OllamaClient(ollamaUrl, model);
     }
 
@@ -227,7 +247,11 @@ public class App {
             thread.setDaemon(true);
             return thread;
         });
-        return new StudyGenerator(new StudyRepository(dataSource), llm, descriptions, worker);
+        StudyGenerator generator = new StudyGenerator(new StudyRepository(dataSource), llm, descriptions, worker);
+        // Loads the model in the background so the first summary doesn't wait ~10 seconds for it.
+        // If Ollama isn't up yet this only logs a warning.
+        generator.warmUp();
+        return generator;
     }
 
     /** Strict JSON: bodies with fields we don't expect are rejected instead of silently ignored. */

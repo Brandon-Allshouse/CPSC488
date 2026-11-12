@@ -9,8 +9,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Reads and writes the {@code video_study} table (V12). */
 public class StudyRepository {
@@ -42,6 +45,30 @@ public class StudyRepository {
                 return Optional.of(new StudyMaterial(rs.getString("summary"), questions));
             }
         } catch (SQLException | JsonProcessingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Which of these videos already have study material. One query for a whole feed page, so
+     * lining up summaries ahead of time doesn't slow the feed down.
+     */
+    Set<String> withMaterial(Collection<String> youtubeIds) {
+        if (youtubeIds.isEmpty()) {
+            return Set.of();
+        }
+        String sql = "SELECT youtube_id FROM video_study WHERE youtube_id = ANY(?)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setArray(1, conn.createArrayOf("text", youtubeIds.toArray()));
+            Set<String> found = new HashSet<>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    found.add(rs.getString(1));
+                }
+            }
+            return found;
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }

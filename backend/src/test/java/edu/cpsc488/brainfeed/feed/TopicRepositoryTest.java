@@ -41,12 +41,13 @@ class TopicRepositoryTest {
     @Test
     void listsSubjectsAlphabeticallyThenSubSubjects() {
         List<Topic> all = topics.listAll();
-        assertEquals(120, all.size());
+        // 120 from V3/V4, plus the Explore subject from V15
+        assertEquals(121, all.size());
         List<Topic> subjects = all.stream().filter(topic -> topic.parentId() == null).toList();
-        assertEquals(20, subjects.size());
+        assertEquals(21, subjects.size());
         assertEquals("Art", subjects.get(0).name());
         // every subject comes before every sub-subject
-        assertNull(all.get(19).parentId());
+        assertNull(all.get(20).parentId());
         assertEquals(math, all.stream().filter(t -> t.name().equals("Algebra 2")).findFirst().orElseThrow().parentId());
         assertTrue(all.stream().noneMatch(Topic::ai));
     }
@@ -103,7 +104,7 @@ class TopicRepositoryTest {
         topics.replaceInterests(user, List.of(space));
         List<TopicRepository.SearchTopic> due = topics.dueForRefresh(Duration.ofDays(7));
         assertEquals(space, due.get(0).id());
-        assertEquals(120, due.size());
+        assertEquals(121, due.size());
     }
 
     @Test

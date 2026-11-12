@@ -23,8 +23,12 @@ import java.io.UncheckedIOException;
  */
 final class StudyPrompt {
 
-    // Plenty for a summary. Small models get slower and vaguer with long inputs.
-    static final int MAX_DESCRIPTION = 2000;
+    // Plenty for a summary once the links and promotion are gone (see DescriptionCleaner). Small
+    // models get slower and vaguer with long inputs: each prompt token costs ~5 ms on a CPU.
+    static final int MAX_DESCRIPTION = 1000;
+    // Our replies were 180-340 tokens in testing, so this is 3x the longest. A model stuck
+    // repeating itself gives up after ~40 seconds instead of ~80 at the general 2,048 cap.
+    static final int MAX_REPLY_TOKENS = 1024;
 
     static final String SYSTEM = """
             You write study material for a learning app. You get one YouTube video's title, channel, \
@@ -40,7 +44,7 @@ final class StudyPrompt {
             must be false, so that someone who knows the topic can't argue for two answers. Then a short \
             one-sentence explanation of why the right option is right, then answer: the correct option \
             copied exactly.
-            Plain text only, no markdown. Write in English.""";
+            Write the JSON on one line with no indentation. Plain text only, no markdown. Write in English.""";
 
     /**
      * Field order matters: the model writes fields in this order, so it writes the options and the
@@ -78,7 +82,9 @@ final class StudyPrompt {
         text.append("Title: ").append(untrusted(video.title(), 300)).append('\n');
         text.append("Channel: ").append(untrusted(video.channel(), 200)).append('\n');
         text.append("Topic: ").append(untrusted(video.topic(), 100)).append('\n');
-        String cleanDescription = untrusted(description == null ? "" : description, MAX_DESCRIPTION);
+        // Junk out and the best sentences picked first, then cleaned and capped as untrusted text.
+        String relevant = DescriptionCleaner.clean(description, video.title(), video.topic(), MAX_DESCRIPTION);
+        String cleanDescription = untrusted(relevant, MAX_DESCRIPTION);
         text.append("Description: ").append(cleanDescription.isEmpty() ? "(none)" : cleanDescription).append('\n');
         return text.append("</video>").toString();
     }

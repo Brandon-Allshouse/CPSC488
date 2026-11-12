@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Bookmark, Eye, Heart, History, Home, LogIn, Pencil, ShieldCheck, Trophy } from 'lucide-react';
+import { Bookmark, Eye, Heart, History, Home, LogIn, NotebookPen, Pencil, ShieldCheck, Trophy } from 'lucide-react';
 import type { User } from '../api/auth';
 import brainLogo from '../assets/brainfeed-logo.png';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,8 @@ interface Props {
   onGoHome: () => void;
   onEditInterests: () => void;
   onShowLikedVideos: () => void;
+  /** Your videos, scrolled to the Study notebook. Left out, the link isn't shown. */
+  onShowNotebook?: () => void;
   onShowHistory: () => void;
   onShowLeaderboard: () => void;
   onShowAdmin: () => void;
@@ -57,6 +59,7 @@ export default function FeedSidebar({
   onGoHome,
   onEditInterests,
   onShowLikedVideos,
+  onShowNotebook,
   onShowHistory,
   onShowLeaderboard,
   onShowAdmin,
@@ -72,6 +75,11 @@ export default function FeedSidebar({
         <NavItem icon={<Heart />} onClick={onShowLikedVideos}>
           Your videos
         </NavItem>
+        {onShowNotebook && (
+          <NavItem icon={<NotebookPen />} onClick={onShowNotebook}>
+            Study notebook
+          </NavItem>
+        )}
         <NavItem icon={<History />} onClick={onShowHistory}>
           Watch history
         </NavItem>

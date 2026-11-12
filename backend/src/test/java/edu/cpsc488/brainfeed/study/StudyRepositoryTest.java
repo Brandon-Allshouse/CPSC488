@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,6 +32,14 @@ class StudyRepositoryTest {
         assertEquals(MATERIAL, repository.find("video000001").orElseThrow());
         assertEquals("gemma4:e4b", TestDatabase.text("SELECT model FROM video_study"));
         assertEquals(1, repository.writtenInLastDay());
+    }
+
+    @Test
+    void findsWhichVideosOfAPageAlreadyHaveMaterial() {
+        TestDatabase.addVideo("video000002", TestDatabase.topicId("Biology"));
+        repository.save("video000001", MATERIAL, "gemma4:e4b");
+        assertEquals(Set.of("video000001"), repository.withMaterial(List.of("video000001", "video000002", "unknown0001")));
+        assertEquals(Set.of(), repository.withMaterial(List.of()));
     }
 
     @Test

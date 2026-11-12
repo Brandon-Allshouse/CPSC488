@@ -177,4 +177,19 @@ class AdminRepositoryTest {
         assertEquals(1, TestDatabase.number("SELECT count(*) FROM topics WHERE id = ?", math));
         assertTrue(admins.recentActions(10).isEmpty());
     }
+
+    @Test
+    void removalsByTheAiReviewSayAiReviewInTheLog() {
+        // TopicReviewer logs with no admin and no IP
+        TestDatabase.exec("INSERT INTO admin_actions (admin_id, ip, action, target, reason) "
+                + "VALUES (NULL, NULL, 'remove_topic', 'Bad Topic (#99)', 'Removed automatically')");
+        assertEquals(AdminRepository.AI_REVIEW, admins.recentActions(10).get(0).admin());
+    }
+
+    @Test
+    void actionsByADeletedAdminStillShowNoName() {
+        TestDatabase.exec("INSERT INTO admin_actions (admin_id, ip, action, target, reason) "
+                + "VALUES (NULL, CAST('192.0.2.1' AS inet), 'remove_topic', 'Comets (#5)', 'spam')");
+        assertNull(admins.recentActions(10).get(0).admin());
+    }
 }

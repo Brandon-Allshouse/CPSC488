@@ -2,119 +2,65 @@ package edu.cpsc488.brainfeed.topics;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-// Topic names go into the catalog everyone sees, so only tidy, short names should get through.
+// The review can move topics, make subjects and remove topics, so only tidy replies get through.
 class TopicParserTest {
 
-    private static String reply(String... topics) {
-        return "{\"topics\": [" + String.join(",", topics) + "]}";
-    }
-
-    private static String topic(String subject, String name, String query) {
-        return "{\"subject\": \"" + subject + "\", \"name\": \"" + name + "\", \"searchQuery\": \"" + query + "\"}";
+    static String review(boolean harmful, String subject, String query) {
+        return "{\"harmful\": " + harmful + ", \"subject\": \"" + subject + "\", \"searchQuery\": \"" + query + "\"}";
     }
 
     @Test
-    void readsGoodTopics() {
-        List<TopicParser.Idea> ideas = TopicParser.parse(reply(
-                topic("Space", "Black Holes", "black holes explained"),
-                topic("Music", "Guitar Chords", "guitar chords for beginners"))).orElseThrow();
-        assertEquals(List.of(
-                new TopicParser.Idea("Space", "Black Holes", "black holes explained"),
-                new TopicParser.Idea("Music", "Guitar Chords", "guitar chords for beginners")), ideas);
-    }
-
-    @Test
-    void anEmptyListIsFine() {
-        // that's how the model says no, e.g. for a request that isn't something people learn
-        assertEquals(Optional.of(List.of()), TopicParser.parse(reply()));
+    void readsAGoodReview() {
+        assertEquals(Optional.of(new TopicParser.Review(false, "Space", "black holes explained")),
+                TopicParser.parse(review(false, "Space", "black holes explained")));
+        assertEquals(true, TopicParser.parse(review(true, "Space", "x explained")).orElseThrow().harmful());
     }
 
     @Test
     void brokenRepliesAreEmpty() {
         assertEquals(Optional.empty(), TopicParser.parse("not json"));
         assertEquals(Optional.empty(), TopicParser.parse(null));
-        assertEquals(Optional.empty(), TopicParser.parse("{\"topics\": \"Black Holes\"}"));
         assertEquals(Optional.empty(), TopicParser.parse("[]"));
+        assertEquals(Optional.empty(), TopicParser.parse("{\"subject\": \"Space\"}"));
     }
 
     @Test
-    void dropsNamesThatLookLikeMarkupOrAreTooLong() {
-        List<TopicParser.Idea> ideas = TopicParser.parse(reply(
-                topic("Space", "<script>alert(1)</script>", "x explained"),
-                topic("Space", "Black \\\"Holes\\\"", "x explained"),
-                topic("Space", "a".repeat(TopicParser.MAX_NAME + 1), "x explained"),
-                topic("<b>Space</b>", "Comets", "comets explained"),
-                topic("Space", "-Dashes first", "x explained"),
-                topic("Space", "Nebulae", "nebulae explained"))).orElseThrow();
-        assertEquals(List.of("Nebulae"), ideas.stream().map(TopicParser.Idea::name).toList());
+    void harmfulMustBeARealTrueOrFalse() {
+        // it decides whether a topic is removed, so a string or number is never guessed at
+        assertEquals(Optional.empty(), TopicParser.parse("{\"harmful\": \"false\", \"subject\": \"Space\", \"searchQuery\": \"x y z\"}"));
+        assertEquals(Optional.empty(), TopicParser.parse("{\"harmful\": 0, \"subject\": \"Space\", \"searchQuery\": \"x y z\"}"));
     }
 
     @Test
-    void allowsNamesInOtherLanguagesAndCommonPunctuation() {
-        List<TopicParser.Idea> ideas = TopicParser.parse(reply(
-                topic("Languages", "Español Básico", "spanish basics"),
-                topic("Programming", "C++ & C#", "c++ basics"),
-                topic("History", "World War I (1914-1918)", "ww1 explained"))).orElseThrow();
-        assertEquals(3, ideas.size());
+    void badSubjectsAndQueriesAreDroppedNotFixed() {
+        TopicParser.Review markup = TopicParser.parse(review(false, "<b>Space</b>", "<script>")).orElseThrow();
+        assertNull(markup.subject());
+        assertNull(markup.searchQuery());
+        TopicParser.Review tooLong = TopicParser.parse(review(false, "a".repeat(31), "b".repeat(81))).orElseThrow();
+        assertNull(tooLong.subject());
+        assertNull(tooLong.searchQuery());
+        // a subject is a broad field, not a sentence
+        assertNull(TopicParser.parse(review(false, "The Study Of Many Things", "x explained")).orElseThrow().subject());
     }
 
     @Test
-    void examAndCertificationNamesKeepTheirRealSpelling() {
-        // a user asked for "security+ certification" and needs exactly this topic, not a general one
-        List<TopicParser.Idea> ideas = TopicParser.parse(reply(
-                topic("Cybersecurity", "CompTIA Security+", "CompTIA Security+ exam prep"),
-                topic("Programming", "AWS Cloud Practitioner", "AWS Cloud Practitioner exam prep"),
-                topic("Health", "MCAT Exam Prep", "MCAT exam prep"))).orElseThrow();
-        assertEquals(List.of("CompTIA Security+", "AWS Cloud Practitioner", "MCAT Exam Prep"),
-                ideas.stream().map(TopicParser.Idea::name).toList());
-        assertEquals("CompTIA Security+ exam prep", ideas.get(0).searchQuery());
+    void skipsAThinkingBlockBeforeTheJson() {
+        assertEquals("Space", TopicParser.parse("<think>hmm</think>" + review(false, "Space", "stars explained"))
+                .orElseThrow().subject());
     }
 
     @Test
-    void controlCharactersAndSpacesAreCleanedUp() {
-        String messy = "{\"topics\": [{\"subject\": \" Space \", \"name\": \"Black\\n\\tHoles\", \"searchQuery\": \"black holes\"}]}";
-        assertEquals("Black Holes", TopicParser.parse(messy).orElseThrow().get(0).name());
+    void queryFallsBackToNameExplained() {
+        assertEquals("Black Holes explained", TopicParser.query(null, "Black Holes"));
     }
 
     @Test
-    void duplicatesCountOnce() {
-        List<TopicParser.Idea> ideas = TopicParser.parse(reply(
-                topic("Space", "Black Holes", "a explained"),
-                topic("Physics", "black holes", "b explained"))).orElseThrow();
-        assertEquals(1, ideas.size());
-    }
-
-    @Test
-    void keepsAtMostFive() {
-        String[] six = new String[6];
-        for (int i = 0; i < six.length; i++) {
-            six[i] = topic("Space", "Topic " + i, "topic explained");
-        }
-        assertEquals(TopicParser.MAX_IDEAS, TopicParser.parse(reply(six)).orElseThrow().size());
-    }
-
-    @Test
-    void aBadSearchQueryFallsBackToTheName() {
-        TopicParser.Idea idea = TopicParser.parse(reply(topic("Space", "Comets", "<img>"))).orElseThrow().get(0);
-        assertEquals("Comets explained", idea.searchQuery());
-        TopicParser.Idea missing = TopicParser.parse("{\"topics\": [{\"subject\": \"Space\", \"name\": \"Comets\"}]}")
-                .orElseThrow().get(0);
-        assertEquals("Comets explained", missing.searchQuery());
-    }
-
-    @Test
-    void namesAreComparedIgnoringCaseAndSpaces() {
-        assertEquals(TopicParser.key("Algebra 2"), TopicParser.key("  algebra   2 "));
-    }
-
-    @Test
-    void skipsThinkingBeforeTheJson() {
-        assertTrue(TopicParser.parse("<think>hmm</think>" + reply(topic("Space", "Comets", "comets"))).isPresent());
+    void keyIgnoresCaseAndSpacing() {
+        assertEquals("black holes", TopicParser.key("  Black   HOLES "));
     }
 }

@@ -411,4 +411,30 @@ describe('YourVideosPage', () => {
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Personal study notes' }).value).toBe('Finish these notes later.');
   });
 
+  it('scrolls to the Study notebook when opened from a notebook link', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<YourVideosPage user={testUser} {...handlers} playlists={testPlaylists} focusNotebook />);
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
+    expect(document.activeElement?.id).toBe('study-notebook-title');
+  });
+
+  it('jumps back to the Saved tab and the notebook when the notebook link is used on this page', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<YourVideosPage user={testUser} {...handlers} onShowNotebook={vi.fn()} playlists={testPlaylists} />);
+    openTab(/Liked/);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Study notebook' }));
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
+    expect(screen.getByRole('tab', { name: /Saved/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('does not scroll anywhere on a normal visit', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Study notebook' })).toBeTruthy();
+    expect(scrolled).not.toHaveBeenCalled();
+  });
 });

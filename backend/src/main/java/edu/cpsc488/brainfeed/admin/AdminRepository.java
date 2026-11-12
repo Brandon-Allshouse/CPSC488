@@ -262,13 +262,21 @@ public class AdminRepository {
         });
     }
 
+    /** Shown as the admin for removals made by the background AI review (topics/TopicReviewer). */
+    public static final String AI_REVIEW = "AI review";
+
+    // The AI review logs its removals with no admin and no IP. A real admin always has an id
+    // (until their account is deleted) and a request IP, so this tells the two apart.
+    private static final String ADMIN_LABEL = "CASE WHEN a.admin_id IS NULL AND a.ip IS NULL AND a.action = 'remove_topic'"
+            + " THEN '" + AI_REVIEW + "' ELSE u.username END";
+
     public List<AdminAction> recentActions(int limit) {
         String sql = """
-                SELECT a.id, u.username AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at
+                SELECT a.id, %s AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at
                 FROM admin_actions a LEFT JOIN users u ON u.id = a.admin_id
                 ORDER BY a.created_at DESC, a.id DESC
                 LIMIT ?
-                """;
+                """.formatted(ADMIN_LABEL);
         return query(sql, ps -> ps.setInt(1, limit), rs -> new AdminAction(rs.getLong("id"),
                 rs.getString("admin"), rs.getString("action"), rs.getString("target"),
                 rs.getString("reason"), rs.getString("ip"), rs.getObject("created_at", OffsetDateTime.class)));

@@ -60,6 +60,13 @@ vi.mock('../api/feed', () => ({
 
 // The Up next column repeats the feed's titles; it has its own tests in UpNext.test.tsx.
 vi.mock('../components/UpNext', () => ({ default: () => null }));
+vi.mock('../api/leaderboard', () => ({
+  fetchLeaderboard: vi.fn().mockResolvedValue({
+    weekStart: '2026-11-09T00:00:00Z',
+    week: { top: [], you: null },
+    allTime: { top: [], you: null },
+  }),
+}));
 
 // The sidebar has the same buttons as the Profile menu, so pick the menu's copy.
 function menuItem(name: string) {
@@ -519,7 +526,7 @@ describe('FeedPage', () => {
     expect(onLogout).toHaveBeenCalled();
   });
 
-  it('opens the blank leaderboard screen and returns to the feed', () => {
+  it('opens the leaderboard and returns to the feed', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
 
@@ -527,7 +534,7 @@ describe('FeedPage', () => {
     fireEvent.click(menuItem('Leaderboard'));
 
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Leaderboard information' })).toBeTruthy();
+    expect(await screen.findByText('Nobody has points this week')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Update leaderboard' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(menuItem('Interests')).toBeTruthy();
@@ -870,5 +877,17 @@ describe('suggestSubjects', () => {
 
   it('suggests nothing when every subject is already picked', () => {
     expect(suggestSubjects(topics, [1, 2, 3, 4], 7)).toEqual([]);
+  });
+
+  it('opens the Study notebook straight from the Profile menu', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    vi.mocked(fetchSavedVideos).mockResolvedValue([{ ...makeVideo(92), title: 'Notebook lesson' }]);
+    Element.prototype.scrollIntoView = vi.fn();
+    renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(menuItem('Study notebook'));
+    expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
+    expect(await within(screen.getByRole('region', { name: 'Study notebook' })).findByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
   });
 });

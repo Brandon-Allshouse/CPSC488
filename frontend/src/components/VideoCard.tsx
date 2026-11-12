@@ -38,6 +38,8 @@ interface Props {
   onTogglePlaylist?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
   /** Makes a new playlist with this video in it. Throws on failure (e.g. name taken). */
   onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
+  /** Opens the leaderboard from the quiz in the summary box. */
+  onShowLeaderboard?: () => void;
 }
 
 /** The card's element id, so the feed can scroll to a video. YouTube ids are URL-safe already. */
@@ -97,6 +99,7 @@ export default function VideoCard({
   playlists,
   onTogglePlaylist,
   onCreatePlaylist,
+  onShowLeaderboard,
 }: Props) {
   const notebook = canSave && onToggleSaved ? { saved, onToggle: () => onToggleSaved(video) } : undefined;
   const canUsePlaylists = playlists !== undefined && onTogglePlaylist !== undefined && onCreatePlaylist !== undefined;
@@ -285,7 +288,7 @@ export default function VideoCard({
           </span>
         </div>
         {/* Pressing play starts writing the summary, so it's usually ready by the end of the video. */}
-        <StudyBox youtubeId={video.youtubeId} autoStart={playing} />
+        <StudyBox youtubeId={video.youtubeId} autoStart={playing} onShowLeaderboard={onShowLeaderboard} />
       </section>
     </article>
   );

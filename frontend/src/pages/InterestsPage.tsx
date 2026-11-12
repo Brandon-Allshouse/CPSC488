@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { fetchTopics, type Topic } from '../api/feed';
-import { Check, ChevronRight, CircleAlert, Search, Sparkles } from 'lucide-react';
+import { Check, ChevronRight, CircleAlert, Sparkles } from 'lucide-react';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import LanguageSelect from '@/components/LanguageSelect';
 import TopicFinder from '@/components/TopicFinder';
@@ -22,14 +21,15 @@ interface Props {
 }
 
 /**
- * The interests picker: subjects and sub-subjects from /api/topics, a search box, "Select all",
- * and the AI topic finder for signed-in users. Shown on first login and from "Edit interests".
+ * The interests picker: subjects and sub-subjects from /api/topics, "Select all", and the topic
+ * box (TopicFinder), which narrows the list as you type and adds a topic on Enter. Shown on
+ * first login and from "Edit interests".
  */
 export default function InterestsPage({ initial, onSave, onCancel, isGuest, notice }: Props) {
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(() => new Set(initial));
-  // Sections that start open: ones with an earlier pick, plus the section of any topic added with
-  // AI, so the user can see it there. Only ever grows, so sections the user opens or closes stay
+  // Sections that start open: ones with an earlier pick, plus the section of any topic added from
+  // the topic box, so the user can see it there. Only ever grows, so sections the user opens or closes stay
   // that way while they pick.
   const [startOpen, setStartOpen] = useState(() => new Set(initial));
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +41,19 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest, noti
       .then(setTopics)
       .catch(() => setError('Could not load topics. Please refresh the page.'));
   }, []);
+
+  function pick(id: number) {
+    setSelected((current) => new Set(current).add(id));
+    setStartOpen((current) => new Set(current).add(id));
+  }
+
+  function unpick(id: number) {
+    setSelected((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
 
   function toggle(id: number) {
     setSelected((current) => {
@@ -54,16 +67,12 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest, noti
     });
   }
 
-  // A topic added with the AI finder: put it (and its new subject) in the list and pick it.
-  function addTopics(added: Topic[]) {
-    if (added.length === 0) return;
-    setTopics((current) => {
-      const known = new Set((current ?? []).map((topic) => topic.id));
-      return [...(current ?? []), ...added.filter((topic) => !known.has(topic.id))];
-    });
-    const picked = added[added.length - 1];
-    setSelected((current) => new Set(current).add(picked.id));
-    setStartOpen((current) => new Set(current).add(picked.id));
+  // A topic that's new to this page, from the topic box: put it in its subject and pick it.
+  function addTopic(added: Topic) {
+    setTopics((current) =>
+      current?.some((topic) => topic.id === added.id) ? current : [...(current ?? []), added],
+    );
+    pick(added.id);
   }
 
   // Picking a subject already includes all of its sub-subjects (see VideoRepository.page), so
@@ -130,33 +139,23 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest, noti
         </div>
       )}
 
-      {topics && !isGuest && <TopicFinder selected={selected} onToggle={toggle} onAdded={addTopics} />}
-      {topics && isGuest && (
-        <p className="topic-finder-guest flex items-center gap-2 text-sm text-muted-foreground">
-          <Sparkles aria-hidden="true" className="size-4 text-primary" />
-          Log in to find topics with AI and add ones we don't have yet.
-        </p>
-      )}
-
       {topics && (
-        <div className="relative">
-          <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            id="topic-search"
-            type="search"
-            aria-label="Search subjects and topics"
-            placeholder="Search, e.g. algebra or cooking"
-            className="pl-9"
-            maxLength={50}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <TopicFinder
+          topics={topics}
+          selected={selected}
+          onPick={pick}
+          onUnpick={unpick}
+          onAdded={addTopic}
+          onQueryChange={setQuery}
+          isGuest={isGuest}
+        />
       )}
 
       {topics && search && !topics.some((topic) => topic.name.toLowerCase().includes(search)) && (
-        <p className="py-4 text-center text-sm text-muted-foreground" role="status">
-          Nothing matches “{query.trim()}”. Try a shorter word.
+        <p className="no-match py-4 text-center text-sm text-muted-foreground">
+          {isGuest
+            ? `We don't have “${query.trim()}” yet. Log in to add it, or try a shorter word.`
+            : `We don't have “${query.trim()}” yet. Press Enter to add it.`}
         </p>
       )}
 
@@ -212,7 +211,7 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest, noti
                           {topic.ai && (
                             <>
                               <Sparkles aria-hidden="true" className="size-3 text-muted-foreground" />
-                              <span className="sr-only">, added with AI</span>
+                              <span className="sr-only">, added by a user</span>
                             </>
                           )}
                         </button>
