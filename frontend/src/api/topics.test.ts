@@ -18,4 +18,16 @@ describe('topics api', () => {
     expect(await addSuggestedTopic('abc123')).toEqual([topic]);
     expect(request).toHaveBeenCalledWith('/api/me/topics', { method: 'POST', body: '{"key":"abc123"}' });
   });
+
+  it('passes the backend error on, so the finder can show it', async () => {
+    vi.mocked(request).mockRejectedValue(new Error('The topic finder is busy. Try again in a minute.'));
+    await expect(suggestTopics('black holes')).rejects.toThrow('The topic finder is busy. Try again in a minute.');
+  });
+
+  it('sends text with quotes in it as proper JSON', async () => {
+    vi.mocked(request).mockResolvedValue({ matches: [], ideas: [] });
+    await suggestTopics('"} , "admin": true');
+    const body = vi.mocked(request).mock.calls[0][1]!.body as string;
+    expect(JSON.parse(body)).toEqual({ text: '"} , "admin": true' });
+  });
 });

@@ -22,14 +22,16 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Pick interests up front, change them whenever: a whole subject (Math), just part of it (Algebra 2),
   or every subject at once with "Select all subjects"
 - Scrollable feed of educational videos
-- Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
-  videos where clicking a title takes you back to that video in your feed
+- Thumbs up / down on videos, kept in a private list of liked and disliked videos where clicking a
+  title takes you back to that video in your feed (using them to tune the feed is next on the roadmap)
 - Save videos with the bookmark button: every account has a "Watch later" playlist, and you can make
   your own playlists. They're all on the "Your videos" page in the Profile menu
-- Less content from creators/channels you've marked as not interesting
+- A Study notebook: save videos to it from the same bookmark button, write a private note on each,
+  search your notes, and download them as a text file
 - Preferences and history saved for registered users: a private watch history of the last 25 videos
   you pressed play on
-- A random/discovery feed to branch out into new topics
+- A new shuffle of your feed every visit, plus "Explore more subjects" suggestions you can add in
+  one click
 - A short summary and a 2-question quiz under every video, written by a free AI model that runs on
   your own laptop (no API key, no cost)
 - Find topics with AI: type a few keywords or examples ("black holes", "like the Cold War") and pick
@@ -78,14 +80,19 @@ frontend/                     React app (Vite project)
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
                                 FeedSidebar and UpNext (the feed's left and right columns on wide screens),
                                 ThemeToggle (light/dark switch),
-                                SaveMenu (a video's bookmark button and "Save to…" playlist menu),
+                                SaveMenu (a video's bookmark button: Study notebook and playlists),
                                 StudyBox (a video's summary and quiz),
+                                StudyNotebook (notebook videos and their notes on "Your videos"),
+                                StatTile (the summary numbers on Watch history and Your videos),
+                                ProductPitch (what BrainFeed does, beside the login form),
                                 TopicFinder ("Find topics with AI" on the interests page),
                                 LanguageSelect (language picker on the interests page; UI only for now)
   src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
-  src/api/                      typed calls to the backend
+  src/api/                      typed calls to the backend, all through request() in api/client.ts
+  src/lib/                      small helpers: dates, progress numbers, theme, notebook search and download
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
+  src/test/                     test helpers (a fake IntersectionObserver for scrolling)
 docker-compose.yml            runs the whole app locally: database, backend, frontend
 .env.example                  template for your local settings and secrets
 SECURITY.md                   security requirements. Read before touching auth code
@@ -278,6 +285,7 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Backend: Flyway `Validate failed: Migration checksum mismatch` | A migration file changed after it ran on your database. Reset with `docker compose down -v`. Never edit a migration others have run; add a new one. |
 | `port is already allocated` (5432, 7070 or 5173) | Something else is using that port. For 5432 it's usually a separately installed PostgreSQL: stop it in the Services app (`postgresql-x64-…`). For 7070/5173, close any backend or `npm run dev` you started outside Docker. |
 | Login page shows `Request failed (500)`, and frontend logs show `ECONNREFUSED` | The backend isn't running or crashed. Look for the error in the `backend-1` lines, or run `docker compose logs backend`. |
+| The page says `Couldn't reach BrainFeed. Check your connection and try again.` | The browser got no answer at all, so the frontend container itself is down (or you're offline). Run `docker compose up` and refresh. |
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
 | `Too many failed login attempts` while testing | 10 wrong passwords in 15 minutes blocks your IP (see `LoginThrottle`). The limits are kept in memory, so run `docker compose restart backend`. |
 | Video Summary says "The summary writer isn't running right now" | Right after the first `docker compose up`, the model is still downloading: wait for `ollama-pull-1` to print `success`. Otherwise run `docker compose logs ollama ollama-pull` and `docker compose logs backend` (look for `Study material paused`). If the model is missing, `docker compose up -d ollama-pull` downloads it again. |
@@ -640,8 +648,8 @@ All request and response bodies are JSON. Errors look like `{ "error": "message 
 
 `user` is `{ id, email, username, createdAt, admin }`. Other error codes: `400` invalid input, `403`
 account banned (login only, and only after the right password), `409` email or username taken, `429`
-too many attempts. Every POST and PUT must send `Content-Type: application/json`
-(the frontend's `request()` helper in `api/client.ts` does this).
+too many attempts. Every POST, PUT and DELETE must send `Content-Type: application/json`
+(the frontend's `request()` helper in `api/client.ts` does this for every non-GET request).
 
 ## Feed API
 
@@ -779,6 +787,7 @@ Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the use
 | PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
 | DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
 | GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans, unbans and topic removals, with the admin's IP |
+| GET    | `/api/admin/actions/export`             | none              | `200` CSV file download (`brainfeed-audit-log-YYYY-MM-DD.csv`) of up to 10,000 actions, newest first. Built in a temp file first (`export/ExportController`), cells starting with `= + - @` are prefixed with `'` so Excel won't run them |
 | GET    | `/api/admin/topics`                     | none              | `200 { topics }`, AI-added topics, newest first: `{ id, name, subject, addedBy, createdAt, picks }` |
 | DELETE | `/api/admin/topics/{id}`                | `{ reason }`      | `204`; removes an AI-added topic (a subject takes its topics with it), its videos, and blocks the name. `404` for seeded topics |
 
@@ -842,4 +851,6 @@ saved yet; that's the progress-tracking step on the roadmap. Signed-in users can
 with AI on the interests page and add new ones to the shared catalog; admins can remove them.
 
 Backend tests cover the logic, every repository's SQL against a real Postgres, and the auth, watch
-history and security setup over real HTTP.
+history and security setup over real HTTP. Frontend tests cover every page, component and API
+module, including what the user sees while things load, when lists are empty and when a request
+fails (each failed call shows a readable message instead of breaking the page).

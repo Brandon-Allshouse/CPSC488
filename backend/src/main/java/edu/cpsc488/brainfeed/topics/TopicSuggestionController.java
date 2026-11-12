@@ -37,6 +37,7 @@ public class TopicSuggestionController {
         this.currentUser = currentUser;
     }
 
+    /** Adds the topic finder routes. */
     public void register(RoutesConfig routes) {
         routes.post("/api/me/topic-suggestions", this::handleSuggest);
         routes.post("/api/me/topics", this::handleAdd);

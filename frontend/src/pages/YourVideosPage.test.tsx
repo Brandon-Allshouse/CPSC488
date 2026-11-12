@@ -126,6 +126,24 @@ describe('YourVideosPage', () => {
     await vi.waitFor(() => expect(handlers.onRemoveFromPlaylist).toHaveBeenCalledWith(1, 'video000003'));
   });
 
+  it('shows the error when removing a video from a playlist fails', async () => {
+    handlers.onRemoveFromPlaylist.mockRejectedValueOnce(new ApiError(0, "Couldn't reach BrainFeed. Check your connection and try again."));
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Saved title from Watch later' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't reach BrainFeed");
+    expect(screen.getByText('Saved title')).toBeTruthy();
+  });
+
+  it('shows the error when deleting a playlist fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    handlers.onDeletePlaylist.mockRejectedValueOnce(new ApiError(404, "That playlist doesn't exist."));
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete playlist Exam prep' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("That playlist doesn't exist.");
+  });
+
   it('deletes a playlist after asking, but never Watch later', async () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
     vi.spyOn(window, 'confirm').mockReturnValue(true);

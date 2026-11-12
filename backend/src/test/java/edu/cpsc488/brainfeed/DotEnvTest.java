@@ -10,6 +10,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DotEnvTest {
 
@@ -51,6 +53,46 @@ class DotEnvTest {
     @Test
     void blankValueIsAnEmptyString() throws IOException {
         assertEquals("", parse("YOUTUBE_API_KEY=\n").get("YOUTUBE_API_KEY"));
+    }
+
+    @Test
+    void spacesAroundTheKeyAndValueAreIgnored() throws IOException {
+        assertEquals("brainfeed", parse("  DB_USER = brainfeed  \n").get("DB_USER"));
+    }
+
+    @Test
+    void windowsLineEndingsWork() throws IOException {
+        // a .env saved by Notepad has \r\n, and the \r must not end up in the password
+        Map<String, String> values = parse("DB_USER=brainfeed\r\nDB_PASSWORD=secret\r\n");
+        assertEquals("brainfeed", values.get("DB_USER"));
+        assertEquals("secret", values.get("DB_PASSWORD"));
+    }
+
+    @Test
+    void aHashInsideAValueIsKept() throws IOException {
+        // only lines that start with # are comments; a generated secret can contain one
+        assertEquals("abc#123", parse("DB_PASSWORD=abc#123\n").get("DB_PASSWORD"));
+    }
+
+    @Test
+    void quotesThatDontMatchAreLeftAlone() throws IOException {
+        Map<String, String> values = parse("A=\"hello'\nB=\"\nC=''\n");
+        assertEquals("\"hello'", values.get("A"));
+        // a single quote character isn't a pair of quotes
+        assertEquals("\"", values.get("B"));
+        assertEquals("", values.get("C"));
+    }
+
+    @Test
+    void theLastValueWinsWhenAKeyIsRepeated() throws IOException {
+        assertEquals("8080", parse("PORT=7070\nPORT=8080\n").get("PORT"));
+    }
+
+    @Test
+    void anUnreadableFileStopsStartupWithItsPath() {
+        // a folder named .env can't be read as a file
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> DotEnv.parse(folder));
+        assertTrue(e.getMessage().contains(folder.toAbsolutePath().toString()), e.getMessage());
     }
 
     @Test

@@ -5,7 +5,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -69,6 +73,29 @@ class TopicRepositoryTest {
         // 999999 isn't a topic, so the insert fails and the delete before it must roll back
         assertThrows(RuntimeException.class, () -> topics.replaceInterests(user, List.of(space, 999_999)));
         assertEquals(List.of(math), topics.findInterests(user));
+    }
+
+    @Test
+    void savingInterestsTwiceAtOnceDoesNotFail() throws Exception {
+        // a double click or two open tabs used to be able to hit a duplicate key here
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<?>> results = new ArrayList<>();
+            for (int i = 0; i < 20; i++) {
+                List<Integer> picks = i % 2 == 0 ? List.of(math, space) : List.of(math, algebra);
+                results.add(pool.submit(() -> topics.replaceInterests(user, picks)));
+            }
+            for (Future<?> result : results) {
+                // throws if any of them failed
+                result.get();
+            }
+        } finally {
+            pool.shutdown();
+        }
+        // whichever ran last wins, and nothing is mixed from two requests
+        List<Integer> saved = topics.findInterests(user);
+        assertTrue(saved.equals(List.of(math, space).stream().sorted().toList())
+                || saved.equals(List.of(math, algebra).stream().sorted().toList()), saved.toString());
     }
 
     @Test

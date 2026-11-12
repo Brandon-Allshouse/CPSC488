@@ -44,6 +44,7 @@ public class SessionRepository {
         this.idleTimeout = idleTimeout;
     }
 
+    /** The absolute session lifetime, also used as the cookie's Max-Age. */
     public Duration lifetime() {
         return lifetime;
     }
@@ -91,6 +92,7 @@ public class SessionRepository {
         }
     }
 
+    /** Ends the session for this raw token (logout). Unknown tokens are ignored. */
     public void delete(String token) {
         execute("DELETE FROM sessions WHERE token_hash = ?", ps -> ps.setString(1, hash(token)));
     }

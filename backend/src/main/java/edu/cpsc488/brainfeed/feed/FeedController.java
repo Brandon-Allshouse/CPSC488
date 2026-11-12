@@ -73,6 +73,7 @@ public class FeedController {
         this.fetcher = fetcher;
     }
 
+    /** Adds the topic, interest, feedback and feed routes. */
     public void register(RoutesConfig routes) {
         routes.get("/api/topics", this::handleTopics);
         routes.get("/api/me/interests", this::handleGetInterests);
@@ -170,6 +171,10 @@ public class FeedController {
         if (ids == null || ids.isEmpty() || ids.stream().anyMatch(Objects::isNull)) {
             throw ApiException.badRequest("Pick at least one topic.");
         }
+        // Same cap as the feed, so saving interests can't be used to send thousands of ids either.
+        if (ids.size() > MAX_TOPICS_PER_REQUEST) {
+            throw ApiException.badRequest("Too many topics.");
+        }
         Set<Integer> unique = new LinkedHashSet<>(ids);
         if (!validIds.containsAll(unique)) {
             throw ApiException.badRequest("Unknown topic.");
@@ -192,6 +197,10 @@ public class FeedController {
         return auth.currentUser(ctx).orElseThrow(() -> ApiException.unauthorized("Not logged in."));
     }
 
+    /**
+     * Returns the id if it looks like a YouTube video id, otherwise throws a 400. Shared by every
+     * controller that takes one.
+     */
     public static String checkYoutubeId(String youtubeId) {
         if (youtubeId == null || !YouTubeClient.VIDEO_ID.matcher(youtubeId).matches()) {
             throw ApiException.badRequest("Invalid video id.");

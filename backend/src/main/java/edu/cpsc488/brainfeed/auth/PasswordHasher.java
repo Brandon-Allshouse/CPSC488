@@ -54,6 +54,7 @@ public final class PasswordHasher {
         this.permits = new Semaphore(maxConcurrentHashes, true);
     }
 
+    /** Hashes a new password with a fresh salt. Returns the PHC string to store. */
     public String hash(String password) {
         byte[] salt = new byte[SALT_BYTES];
         RANDOM.nextBytes(salt);
@@ -62,6 +63,7 @@ public final class PasswordHasher {
                 + "$" + B64_ENCODE.encodeToString(salt) + "$" + B64_ENCODE.encodeToString(hash);
     }
 
+    /** True if {@code password} matches the stored hash. A malformed hash just doesn't match. */
     public boolean verify(String password, String encoded) {
         // ["", "argon2id", "v=19", "m=..,t=..,p=..", salt, hash]
         String[] parts = encoded == null ? new String[0] : encoded.split("\\$");

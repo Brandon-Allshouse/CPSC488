@@ -39,7 +39,7 @@ public class YouTubeClient {
     static final int MAX_DESCRIPTION = 5000;
 
     private final String apiKey;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private final HttpClient client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .followRedirects(HttpClient.Redirect.NEVER)
@@ -70,11 +70,7 @@ public class YouTubeClient {
             throw new IOException("YouTube request failed: " + e.getClass().getSimpleName());
         }
 
-        JsonNode body = mapper.readTree(response.body());
-        if (response.statusCode() != 200) {
-            throw new IOException("YouTube returned HTTP " + response.statusCode() + " (" + errorReason(body) + ")");
-        }
-        return parseResults(body, topicId);
+        return parseResults(readBody(response.statusCode(), response.body()), topicId);
     }
 
     /**
@@ -98,11 +94,28 @@ public class YouTubeClient {
         } catch (IOException e) {
             throw new IOException("YouTube request failed: " + e.getClass().getSimpleName());
         }
-        JsonNode body = mapper.readTree(response.body());
-        if (response.statusCode() != 200) {
-            throw new IOException("YouTube returned HTTP " + response.statusCode() + " (" + errorReason(body) + ")");
+        return parseDescription(readBody(response.statusCode(), response.body()));
+    }
+
+    /**
+     * Parses YouTube's reply and turns an error status into an IOException. A reply that isn't
+     * JSON (an HTML error page from a proxy, say) gets a short message of our own, since the
+     * parser's message would quote part of the page into our logs.
+     */
+    static JsonNode readBody(int status, String text) throws IOException {
+        JsonNode body;
+        try {
+            body = MAPPER.readTree(text == null ? "" : text);
+        } catch (IOException e) {
+            throw new IOException("YouTube sent back something that isn't JSON (HTTP " + status + ")");
         }
-        return parseDescription(body);
+        if (body == null || body.isMissingNode()) {
+            throw new IOException("YouTube sent back an empty reply (HTTP " + status + ")");
+        }
+        if (status != 200) {
+            throw new IOException("YouTube returned HTTP " + status + " (" + errorReason(body) + ")");
+        }
+        return body;
     }
 
     static String videosUrl(String videoId, String apiKey) {
@@ -116,7 +129,7 @@ public class YouTubeClient {
     /** Pulls the description out of a videos.list response. Newlines are kept; StudyPrompt cleans it. */
     static Optional<String> parseDescription(JsonNode body) {
         String description = body.path("items").path(0).path("snippet").path("description").asText("");
-        description = description.length() > MAX_DESCRIPTION ? description.substring(0, MAX_DESCRIPTION) : description;
+        description = cut(description, MAX_DESCRIPTION);
         return description.isBlank() ? Optional.empty() : Optional.of(description);
     }
 
@@ -178,7 +191,18 @@ public class YouTubeClient {
     }
 
     static String clean(String s, int maxLength) {
-        String cleaned = s.replaceAll("\\p{Cntrl}", " ").strip();
-        return cleaned.length() > maxLength ? cleaned.substring(0, maxLength) : cleaned;
+        return cut(s.replaceAll("\\p{Cntrl}", " ").strip(), maxLength);
+    }
+
+    /**
+     * The first maxLength characters, without cutting an emoji (or any other character outside
+     * the basic plane) in half, which would leave a broken character in the database.
+     */
+    static String cut(String s, int maxLength) {
+        if (s.length() <= maxLength) {
+            return s;
+        }
+        int end = Character.isHighSurrogate(s.charAt(maxLength - 1)) ? maxLength - 1 : maxLength;
+        return s.substring(0, end);
     }
 }

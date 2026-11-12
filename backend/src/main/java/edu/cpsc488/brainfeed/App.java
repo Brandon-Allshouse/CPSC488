@@ -15,6 +15,7 @@ import edu.cpsc488.brainfeed.auth.SecurityLog;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.Database;
+import edu.cpsc488.brainfeed.export.ExportController;
 import edu.cpsc488.brainfeed.feed.FeedController;
 import edu.cpsc488.brainfeed.feed.FeedRefresher;
 import edu.cpsc488.brainfeed.feed.PlaylistController;
@@ -82,7 +83,7 @@ public class App {
         Config settings = new Config(dotEnv);
 
         // Every setting is documented in .env.example.
-        int port = Integer.parseInt(settings.get("PORT", "7070"));
+        int port = settings.port("PORT", 7070);
         String dbUrl = settings.get("DB_URL", "jdbc:postgresql://localhost:5432/brainfeed");
         String dbUser = settings.get("DB_USER", "brainfeed");
         // Secrets have no defaults on purpose: a missing secret stops startup with a clear error,
@@ -146,7 +147,9 @@ public class App {
         StudyController study = new StudyController(studyGenerator(llm, youtubeKey, dataSource));
         TopicSuggestionController topicFinder = new TopicSuggestionController(
                 new TopicSuggestions(new AiTopicRepository(dataSource), llm), auth);
-        AdminController admin = new AdminController(new AdminRepository(dataSource), auth);
+        AdminRepository adminRepository = new AdminRepository(dataSource);
+        AdminController admin = new AdminController(adminRepository, auth);
+        ExportController exports = new ExportController(adminRepository, auth);
         WatchHistoryController history = new WatchHistoryController(
                 new WatchHistoryRepository(dataSource, WatchHistoryController.LIMIT), auth);
         PlaylistController playlists = new PlaylistController(new PlaylistRepository(dataSource), auth);
@@ -162,6 +165,7 @@ public class App {
             savedVideoController.register(config.routes);
             studyNotes.register(config.routes);
             admin.register(config.routes);
+            exports.register(config.routes);
             history.register(config.routes);
             playlists.register(config.routes);
             study.register(config.routes);
@@ -341,6 +345,23 @@ public class App {
                 value = dotEnv.get(name);
             }
             return value == null || value.isBlank() ? fallback : value;
+        }
+
+        /** A TCP port number, with a clear startup error instead of a bare NumberFormatException. */
+        int port(String name, int fallback) {
+            String value = get(name, null);
+            if (value == null) {
+                return fallback;
+            }
+            try {
+                int port = Integer.parseInt(value.trim());
+                if (port >= 1 && port <= 65535) {
+                    return port;
+                }
+            } catch (NumberFormatException ignored) {
+                // falls through to the clearer message below
+            }
+            throw new IllegalStateException(name + " must be a port number from 1 to 65535, but .env has \"" + value + "\".");
         }
 
         String require(String name) {

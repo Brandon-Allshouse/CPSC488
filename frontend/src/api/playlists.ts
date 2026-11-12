@@ -28,6 +28,7 @@ export async function createPlaylist(name: string): Promise<Playlist> {
   return playlist;
 }
 
+/** Deletes one of the user's playlists. Watch later can't be deleted (404). */
 export async function deletePlaylist(playlistId: number): Promise<void> {
   await request<void>(`/api/me/playlists/${playlistId}`, { method: 'DELETE' });
 }
@@ -37,6 +38,7 @@ export async function addToPlaylist(playlistId: number, youtubeId: string): Prom
   await request<void>(`/api/me/playlists/${playlistId}/videos/${encodeURIComponent(youtubeId)}`, { method: 'PUT' });
 }
 
+/** Takes a video out of a playlist. */
 export async function removeFromPlaylist(playlistId: number, youtubeId: string): Promise<void> {
   await request<void>(`/api/me/playlists/${playlistId}/videos/${encodeURIComponent(youtubeId)}`, {
     method: 'DELETE',

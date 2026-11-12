@@ -17,4 +17,9 @@ describe('study api', () => {
     await fetchVideoStudy('../admin/x');
     expect(request).toHaveBeenCalledWith('/api/videos/..%2Fadmin%2Fx/study');
   });
+
+  it('passes errors on to the summary box', async () => {
+    vi.mocked(request).mockRejectedValue(new Error('offline'));
+    await expect(fetchVideoStudy('dQw4w9WgXcQ')).rejects.toThrow('offline');
+  });
 });

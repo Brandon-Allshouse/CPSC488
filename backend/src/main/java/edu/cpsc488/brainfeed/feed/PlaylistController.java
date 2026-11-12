@@ -32,6 +32,7 @@ public class PlaylistController {
         this.auth = auth;
     }
 
+    /** Adds the /api/me/playlists routes. */
     public void register(RoutesConfig routes) {
         routes.get("/api/me/playlists", this::handleList);
         routes.post("/api/me/playlists", this::handleCreate);

@@ -17,9 +17,15 @@ interface Props {
   /** Shown as a Cancel button when the user already has interests and is just editing them. */
   onCancel?: () => void;
   isGuest: boolean;
+  /** A problem to point out before the user picks, e.g. their saved interests didn't load. */
+  notice?: string;
 }
 
-export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Props) {
+/**
+ * The interests picker: subjects and sub-subjects from /api/topics, a search box, "Select all",
+ * and the AI topic finder for signed-in users. Shown on first login and from "Edit interests".
+ */
+export default function InterestsPage({ initial, onSave, onCancel, isGuest, notice }: Props) {
   const [topics, setTopics] = useState<Topic[] | null>(null);
   const [selected, setSelected] = useState<Set<number>>(() => new Set(initial));
   // Sections that start open: ones with an earlier pick, plus the section of any topic added with
@@ -99,6 +105,13 @@ export default function InterestsPage({ initial, onSave, onCancel, isGuest }: Pr
         </>
       }
     >
+      {notice && (
+        <Alert role="alert">
+          <CircleAlert aria-hidden="true" />
+          {notice}
+        </Alert>
+      )}
+
       {topics === null && !error && (
         <div className="flex flex-col gap-2" aria-hidden="true">
           {[0, 1, 2, 3].map((i) => (

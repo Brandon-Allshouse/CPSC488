@@ -22,6 +22,10 @@ public class OllamaClient implements Llm {
 
     // CPU-only laptops take 10-60 seconds per video, plus loading the model after it's been idle.
     static final Duration TIMEOUT = Duration.ofMinutes(4);
+    // Ollama's default is no limit: a model stuck repeating itself keeps going until the timeout,
+    // holding up everyone else's requests. The longest valid reply (a 1,000-character summary
+    // and three full questions) is under 2,000 tokens, so this never cuts off a good one.
+    static final int MAX_REPLY_TOKENS = 2048;
 
     private final URI chatUrl;
     private final String model;
@@ -44,6 +48,10 @@ public class OllamaClient implements Llm {
     }
 
     @Override
+    /**
+     * Sends one non-streaming chat request. Error messages never include the prompt or the reply,
+     * so they're safe to log.
+     */
     public String chat(String system, String user, JsonNode schema) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(chatUrl)
                 .timeout(TIMEOUT)
@@ -84,6 +92,7 @@ public class OllamaClient implements Llm {
         // Low temperature keeps it close to the description instead of making things up.
         options.put("temperature", 0.3);
         options.put("num_ctx", 4096);
+        options.put("num_predict", MAX_REPLY_TOKENS);
         var messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", system);
         messages.addObject().put("role", "user").put("content", user);

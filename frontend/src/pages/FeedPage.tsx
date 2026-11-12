@@ -251,12 +251,12 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
       await addToPlaylist(playlist.id, youtubeId);
     });
 
+  // Throws on failure (except an expired session) so the video's own card can show the message.
   async function changeVideoFeedback(youtubeId: string, feedback: VideoFeedback | null) {
     if (!user) {
       onLogout();
       return;
     }
-    setFeedbackError(null);
     try {
       await saveMyVideoFeedback(youtubeId, feedback);
       feedbackChanges.current[youtubeId] = feedback;
@@ -272,9 +272,9 @@ export default function FeedPage({ topicIds, user, onEditInterests, onAddTopic, 
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         onLogout();
-      } else {
-        setFeedbackError(err instanceof Error ? err.message : 'Could not save video feedback.');
+        return;
       }
+      throw err;
     }
   }
 

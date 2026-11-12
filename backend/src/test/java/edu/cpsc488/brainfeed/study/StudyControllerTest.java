@@ -97,6 +97,26 @@ class StudyControllerTest {
     }
 
     @Test
+    void oneComputerCantStartEndlessNewSummaries() throws Exception {
+        // the controller passes the caller's IP, so the per-IP limit applies over HTTP too
+        for (int i = 0; i < StudyGenerator.NEW_PER_IP_PER_HOUR; i++) {
+            String id = String.format("video%06d", i + 100);
+            repository.videos.put(id, new StudyRepository.VideoInfo("Title", "Test Channel", "Math"));
+            assertEquals("pending", mapper.readTree(get(id).body()).get("status").asText());
+            jobs.forEach(Runnable::run);
+            jobs.clear();
+        }
+        assertEquals("busy", mapper.readTree(get(StudyGeneratorTest.VIDEO).body()).get("status").asText());
+    }
+
+    @Test
+    void statusNamesAreLowercase() {
+        assertEquals(Map.of("status", "busy"), StudyController.body(StudyGenerator.Result.of(StudyGenerator.Status.BUSY)));
+        assertEquals(Map.of("status", "unavailable"),
+                StudyController.body(StudyGenerator.Result.of(StudyGenerator.Status.UNAVAILABLE)));
+    }
+
+    @Test
     void unavailableWhenTheDailyLimitIsUsedUp() throws Exception {
         repository.writtenToday = StudyGenerator.DAILY_LIMIT;
         assertEquals("unavailable", mapper.readTree(get(StudyGeneratorTest.VIDEO).body()).get("status").asText());

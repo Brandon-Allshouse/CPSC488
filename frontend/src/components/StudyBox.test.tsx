@@ -158,4 +158,26 @@ describe('StudyBox', () => {
     render(<StudyBox youtubeId="dQw4w9WgXcQ" />);
     await waitFor(() => expect(document.body.textContent).not.toMatch(/coming soon|on the way/i));
   });
+
+  it('says when lots of videos are waiting, and can try again', async () => {
+    vi.mocked(fetchVideoStudy).mockResolvedValueOnce({ status: 'busy' }).mockResolvedValueOnce(ready);
+    render(<StudyBox youtubeId="dQw4w9WgXcQ" autoStart />);
+    expect(await screen.findByText(/Lots of videos are waiting/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+    expect(await screen.findByText(ready.summary)).toBeTruthy();
+  });
+
+  it("says when the summary writer isn't running", async () => {
+    vi.mocked(fetchVideoStudy).mockResolvedValue({ status: 'unavailable' });
+    render(<StudyBox youtubeId="dQw4w9WgXcQ" autoStart />);
+    expect(await screen.findByText(/isn't running right now/)).toBeTruthy();
+  });
+
+  it('shows a loading message while the summary is being written', () => {
+    vi.mocked(fetchVideoStudy).mockReturnValue(new Promise(() => {}));
+    render(<StudyBox youtubeId="dQw4w9WgXcQ" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Summarize and quiz me' }));
+    expect(screen.getByRole('status').textContent).toContain('Writing a summary and quiz');
+  });
 });

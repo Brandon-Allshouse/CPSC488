@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -243,6 +244,64 @@ class StudyGeneratorTest {
         assertEquals(StudyGenerator.Status.PENDING, generator.request(VIDEO).status());
         runJobs();
         assertEquals(StudyGenerator.Status.READY, generator.request(VIDEO).status());
+    }
+
+    // adds count videos the fake database knows about, named video000100 and up
+    List<String> moreVideos(int count) {
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String id = String.format("video%06d", i + 100);
+            repository.videos.put(id, new StudyRepository.VideoInfo("Title", "Test Channel", "Math"));
+            ids.add(id);
+        }
+        return ids;
+    }
+
+    @Test
+    void oneIpCanOnlyStartSoManyNewSummariesAnHour() {
+        StudyGenerator generator = generator();
+        for (String id : moreVideos(StudyGenerator.NEW_PER_IP_PER_HOUR)) {
+            assertEquals(StudyGenerator.Status.PENDING, generator.request(id, "203.0.113.7").status());
+            // run each one right away so the queue limit isn't what stops us
+            runJobs();
+        }
+        assertEquals(StudyGenerator.Status.BUSY, generator.request(VIDEO, "203.0.113.7").status());
+        assertTrue(jobs.isEmpty());
+        // someone else can still start one
+        assertEquals(StudyGenerator.Status.PENDING, generator.request(VIDEO, "198.51.100.20").status());
+    }
+
+    @Test
+    void finishedSummariesAreServedEvenPastThePerIpLimit() {
+        StudyGenerator generator = generator();
+        List<String> ids = moreVideos(StudyGenerator.NEW_PER_IP_PER_HOUR);
+        for (String id : ids) {
+            generator.request(id, "203.0.113.7");
+            runJobs();
+        }
+        assertEquals(StudyGenerator.Status.READY, generator.request(ids.get(0), "203.0.113.7").status());
+    }
+
+    @Test
+    void askingAgainForOneInTheQueueDoesNotCountAgainstTheIp() {
+        // the page polls while it waits, and that shouldn't use up the limit
+        StudyGenerator generator = generator();
+        for (int i = 0; i < StudyGenerator.NEW_PER_IP_PER_HOUR + 5; i++) {
+            assertEquals(StudyGenerator.Status.PENDING, generator.request(VIDEO, "203.0.113.7").status());
+        }
+        runJobs();
+        String other = moreVideos(1).get(0);
+        assertEquals(StudyGenerator.Status.PENDING, generator.request(other, "203.0.113.7").status());
+    }
+
+    @Test
+    void aShutDownWorkerIsUnavailableNotStuckPending() {
+        StudyGenerator generator = new StudyGenerator(repository, llm, id -> Optional.empty(), job -> {
+            throw new RejectedExecutionException("shut down");
+        }, clock);
+        assertEquals(StudyGenerator.Status.UNAVAILABLE, generator.request(VIDEO).status());
+        // and it wasn't left in the queue, which would make it say PENDING forever
+        assertEquals(StudyGenerator.Status.UNAVAILABLE, generator.request(VIDEO).status());
     }
 
     @Test

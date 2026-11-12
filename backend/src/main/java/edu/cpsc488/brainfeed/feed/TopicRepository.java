@@ -1,5 +1,7 @@
 package edu.cpsc488.brainfeed.feed;
 
+import edu.cpsc488.brainfeed.db.Database;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -64,13 +66,19 @@ public class TopicRepository {
     /**
      * Replaces all of the user's interests with {@code topicIds}, in one transaction, so a failure
      * halfway through can't leave them with no interests. Callers must check the ids exist first.
+     *
+     * <p>The user's row is locked first, so two saves at once (a double click, two tabs) take
+     * turns: the second one's delete then sees the first one's rows, instead of both inserting the
+     * same ids and one failing with a duplicate key. The last save wins.
      */
     public void replaceInterests(long userId, Collection<Integer> topicIds) {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try (PreparedStatement delete = conn.prepareStatement("DELETE FROM user_interests WHERE user_id = ?");
+        Database.inTransaction(dataSource, conn -> {
+            try (PreparedStatement lock = conn.prepareStatement("SELECT 1 FROM users WHERE id = ? FOR NO KEY UPDATE");
+                 PreparedStatement delete = conn.prepareStatement("DELETE FROM user_interests WHERE user_id = ?");
                  PreparedStatement insert = conn.prepareStatement(
-                         "INSERT INTO user_interests (user_id, topic_id) VALUES (?, ?)")) {
+                         "INSERT INTO user_interests (user_id, topic_id) VALUES (?, ?) ON CONFLICT DO NOTHING")) {
+                lock.setLong(1, userId);
+                lock.executeQuery().close();
                 delete.setLong(1, userId);
                 delete.executeUpdate();
                 for (int topicId : topicIds) {
@@ -79,14 +87,9 @@ public class TopicRepository {
                     insert.addBatch();
                 }
                 insert.executeBatch();
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+            return null;
+        });
     }
 
     /**

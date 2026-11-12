@@ -34,6 +34,7 @@ public class BreachedPasswordChecker implements Predicate<String> {
             .build();
 
     @Override
+    /** True if the password is in the breach corpus. False if it isn't, or if the check couldn't run. */
     public boolean test(String password) {
         String sha1 = sha1Hex(PasswordHasher.normalize(password));
         String prefix = sha1.substring(0, 5);

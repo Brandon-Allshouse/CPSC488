@@ -8,6 +8,7 @@ import edu.cpsc488.brainfeed.auth.PasswordPolicy;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.TestDatabase;
+import edu.cpsc488.brainfeed.export.ExportController;
 import edu.cpsc488.brainfeed.feed.FeedController;
 import edu.cpsc488.brainfeed.feed.PlaylistController;
 import edu.cpsc488.brainfeed.feed.PlaylistRepository;
@@ -70,6 +71,7 @@ class AccessControlTest {
             new String[]{"PUT", "/api/admin/banned-videos/video000001", "{\"reason\":\"x\"}"},
             new String[]{"DELETE", "/api/admin/banned-videos/video000001", null},
             new String[]{"GET", "/api/admin/actions", null},
+            new String[]{"GET", "/api/admin/actions/export", null},
             new String[]{"GET", "/api/admin/topics", null},
             new String[]{"DELETE", "/api/admin/topics/1", "{\"reason\":\"x\"}"});
 
@@ -90,6 +92,7 @@ class AccessControlTest {
             new SavedVideoController(new SavedVideoRepository(data), auth).register(routes);
             new StudyNoteController(new StudyNoteRepository(data), auth).register(routes);
             new AdminController(new AdminRepository(data), auth).register(routes);
+            new ExportController(new AdminRepository(data), auth).register(routes);
             new WatchHistoryController(new WatchHistoryRepository(data, WatchHistoryController.LIMIT), auth).register(routes);
             new PlaylistController(new PlaylistRepository(data), auth).register(routes);
             new TopicSuggestionController(new TopicSuggestions(new AiTopicRepository(data), null), auth).register(routes);

@@ -31,6 +31,15 @@ class OllamaClientTest {
     }
 
     @Test
+    void repliesHaveALengthLimit() throws Exception {
+        // without num_predict a model that starts repeating itself runs until the 4-minute timeout
+        JsonNode options = mapper.readTree(OllamaClient.requestBody("qwen3:4b", "s", "u", schema)).get("options");
+        assertEquals(OllamaClient.MAX_REPLY_TOKENS, options.get("num_predict").asInt());
+        assertTrue(options.get("num_predict").asInt() > 0);
+        assertTrue(options.get("num_predict").asInt() < options.get("num_ctx").asInt());
+    }
+
+    @Test
     void videoTextIsJsonEscapedNotPastedIntoTheRequest() throws Exception {
         String sneaky = "\", \"model\": \"other\"";
         JsonNode body = mapper.readTree(OllamaClient.requestBody("qwen3:4b", "system text", sneaky, schema));

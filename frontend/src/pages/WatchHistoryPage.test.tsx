@@ -108,6 +108,17 @@ describe('WatchHistoryPage', () => {
     expect(screen.queryByRole('button', { name: 'Clear history' })).toBeNull();
   });
 
+  it('shows an error if clearing fails, and keeps the videos', async () => {
+    vi.mocked(clearWatchHistory).mockRejectedValue(new ApiError(500, 'Something went wrong on our end.'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear history' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, clear' }));
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Something went wrong on our end.');
+    expect(screen.getByText('Test video 1')).toBeTruthy();
+    expect(screen.getByText('Test video 2')).toBeTruthy();
+  });
+
   it('shows an empty state when nothing has been watched', async () => {
     vi.mocked(fetchWatchHistory).mockResolvedValue({ videos: [], limit: 25 });
     renderPage();

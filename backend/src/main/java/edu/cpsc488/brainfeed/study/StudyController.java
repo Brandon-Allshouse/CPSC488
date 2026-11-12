@@ -26,6 +26,7 @@ public class StudyController {
         this.generator = generator;
     }
 
+    /** Adds the study route. */
     public void register(RoutesConfig routes) {
         routes.get("/api/videos/{youtubeId}/study", this::handleGet);
     }
@@ -35,7 +36,7 @@ public class StudyController {
         if (!YOUTUBE_ID.matcher(youtubeId).matches()) {
             throw ApiException.badRequest("Invalid video id.");
         }
-        StudyGenerator.Result result = generator.request(youtubeId);
+        StudyGenerator.Result result = generator.request(youtubeId, ctx.ip());
         if (result.status() == StudyGenerator.Status.NOT_FOUND) {
             throw ApiException.notFound("Video not found.");
         }

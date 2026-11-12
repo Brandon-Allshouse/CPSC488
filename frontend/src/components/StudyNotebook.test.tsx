@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api/client';
 import { fetchStudyNotes, saveStudyNote } from '../api/studyNotes';
 import StudyNotebook from './StudyNotebook';
 
@@ -147,5 +148,34 @@ describe('StudyNotebook', () => {
     expect(click).toHaveBeenCalledTimes(1);
     vi.runOnlyPendingTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:study-notes');
+  });
+
+  it('shows a message when removing a video fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { props } = setup();
+    props.onRemoveVideo.mockRejectedValue(new Error('Could not remove this study video.'));
+    const remove = screen.getByRole<HTMLButtonElement>('button', { name: 'Remove Matrix multiplication from Study notebook' });
+    await waitFor(() => expect(remove.disabled).toBe(false));
+    fireEvent.click(remove);
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not remove this study video.');
+  });
+
+  it('sends the user to log in again when their session expired while saving', async () => {
+    vi.mocked(saveStudyNote).mockRejectedValue(new ApiError(401, 'Not logged in.'));
+    const { props } = setup();
+    const editor = await openEditor();
+    fireEvent.change(editor, { target: { value: 'new note' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await waitFor(() => expect(props.onSessionExpired).toHaveBeenCalled());
+    // nothing else to show: the login page replaces this one
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('says when the notebook is empty', async () => {
+    vi.mocked(fetchStudyNotes).mockResolvedValue([]);
+    const props = { videos: [], removing: false, onOpenVideo: vi.fn(), onRemoveVideo: vi.fn(), onSessionExpired: vi.fn(), onDirtyChange: vi.fn() };
+    render(<StudyNotebook {...props} />);
+    expect(await screen.findByText(/No study videos yet/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: /Download notes/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

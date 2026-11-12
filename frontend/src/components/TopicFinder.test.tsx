@@ -113,4 +113,19 @@ describe('TopicFinder', () => {
     expect(await screen.findByText('<img src=x onerror=alert(1)>')).toBeTruthy();
     expect(container.querySelector('img')).toBeNull();
   });
+
+  it('says it is looking and locks the box while the AI works', async () => {
+    let finish: (value: typeof suggestions) => void = () => {};
+    vi.mocked(suggestTopics).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderFinder();
+    search('black holes');
+
+    expect(screen.getByRole('status').textContent).toContain('Looking for topics');
+    expect((screen.getByLabelText('What do you want to learn?') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Looking…' }) as HTMLButtonElement).disabled).toBe(true);
+
+    finish(suggestions);
+    expect(await screen.findByText('Already on BrainFeed')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
 });

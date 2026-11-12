@@ -30,10 +30,12 @@ public class LoginRateLimiter {
         this.window = window;
     }
 
+    /** How far back attempts are counted. */
     public Duration window() {
         return window;
     }
 
+    /** True if {@code key} already used up its attempts in the current window. */
     public boolean isLimited(String key) {
         Deque<Instant> times = attempts.get(key);
         if (times == null) {
@@ -45,6 +47,7 @@ public class LoginRateLimiter {
         }
     }
 
+    /** Counts one attempt for {@code key}. */
     public void record(String key) {
         if (attempts.size() > CLEANUP_THRESHOLD) {
             cleanup();
@@ -56,6 +59,7 @@ public class LoginRateLimiter {
         }
     }
 
+    /** Forgets every attempt for {@code key}, e.g. after a correct password. */
     public void reset(String key) {
         attempts.remove(key);
     }

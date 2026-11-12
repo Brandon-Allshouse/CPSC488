@@ -87,6 +87,34 @@ describe('VideoCard', () => {
     await waitFor(() => expect(onFeedbackChange).toHaveBeenLastCalledWith(video.youtubeId, null));
   });
 
+  it('shows a failed thumbs save on the card and clears it when the next try works', async () => {
+    const failOnce = vi.fn().mockRejectedValueOnce(new Error('Could not save your choice.')).mockResolvedValue(undefined);
+    render(<VideoCard video={video} feedback={null} onFeedbackChange={failOnce} />);
+    const like = screen.getByRole<HTMLButtonElement>('button', { name: 'I liked this video' });
+
+    fireEvent.click(like);
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not save your choice.');
+    // the buttons come back so the user can try again
+    expect(like.disabled).toBe(false);
+
+    fireEvent.click(like);
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('disables the thumbs while a choice is saving, so it is only sent once', async () => {
+    let finish: () => void = () => {};
+    const slow = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+    render(<VideoCard video={video} feedback={null} onFeedbackChange={slow} />);
+    const like = screen.getByRole<HTMLButtonElement>('button', { name: 'I liked this video' });
+
+    fireEvent.click(like);
+    expect(like.disabled).toBe(true);
+    fireEvent.click(like);
+    expect(slow).toHaveBeenCalledTimes(1);
+    finish();
+    await waitFor(() => expect(like.disabled).toBe(false));
+  });
+
   it('keeps a separate thumbs choice for each video', () => {
     // the feed shows lots of cards at once, so liking one shouldn't touch the others
     render(

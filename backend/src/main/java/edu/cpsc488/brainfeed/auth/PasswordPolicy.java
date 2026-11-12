@@ -28,6 +28,7 @@ public final class PasswordPolicy {
         this.isBreached = isBreached;
     }
 
+    /** Length in Unicode code points after NFKC, which is how NIST counts characters. */
     public static int length(String password) {
         String normalized = PasswordHasher.normalize(password);
         return normalized.codePointCount(0, normalized.length());

@@ -326,6 +326,40 @@ describe('FeedPage', () => {
     await waitFor(() => expect(like.getAttribute('aria-pressed')).toBe('false'));
   });
 
+  it('shows a failed thumbs save on that video and keeps the old choice', async () => {
+    vi.mocked(saveMyVideoFeedback).mockRejectedValue(new ApiError(500, 'Something went wrong on our end.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    const like = await screen.findByRole('button', { name: 'I liked this video' });
+    fireEvent.click(like);
+    const card = like.closest('article')!;
+    expect((await within(card).findByRole('alert')).textContent).toBe('Something went wrong on our end.');
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(onLogout).not.toHaveBeenCalled();
+  });
+
+  it('sends the user to log in again if their session expired while saving a thumbs choice', async () => {
+    vi.mocked(saveMyVideoFeedback).mockRejectedValue(new ApiError(401, 'Not logged in.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'I liked this video' }));
+    await vi.waitFor(() => expect(onLogout).toHaveBeenCalled());
+  });
+
+  it("says so when the user's likes and dislikes couldn't load, but still shows the feed", async () => {
+    vi.mocked(fetchMyVideoFeedback).mockRejectedValue(new ApiError(500, 'Something went wrong on our end.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Something went wrong on our end.');
+    expect(await screen.findByText('Test video 1')).toBeTruthy();
+  });
+
   it('takes a guest to login instead of saving video feedback', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
     const { scrollToBottom } = renderFeed(null);
