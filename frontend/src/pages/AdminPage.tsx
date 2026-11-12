@@ -6,7 +6,9 @@ import {
   Download,
   Film,
   History,
+  RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   ShieldOff,
@@ -21,6 +23,7 @@ import {
   fetchAdminStats,
   fetchAiTopics,
   fetchBannedVideos,
+  fetchSecurityLog,
   removeAiTopic,
   searchUsers,
   searchVideos,
@@ -32,6 +35,7 @@ import {
   type AdminVideo,
   type AiTopic,
   type BannedVideo,
+  type SecurityEvent,
 } from '../api/admin';
 import { ApiError } from '../api/client';
 import { parseYoutubeId } from '../validation';
@@ -100,6 +104,22 @@ function BanReasonForm({ label, onConfirm, onCancel, verb = 'ban' }: {
     </form>
   );
 }
+
+// Friendlier names for the events in the security log (SecurityLog.java). Anything not listed is
+// shown as it's written in the log.
+const SECURITY_EVENT_LABELS: Record<string, string> = {
+  login: 'Log in',
+  logout: 'Log out',
+  register: 'Sign up',
+  admin_access: 'Admin page access',
+  cross_site_write: 'Cross-site request blocked',
+  admin_ban_user: 'Ban user',
+  admin_unban_user: 'Unban user',
+  admin_ban_video: 'Ban video',
+  admin_unban_video: 'Unban video',
+  admin_remove_topic: 'Remove topic',
+  topic_added: 'AI topic added',
+};
 
 // One boxed section of the page with a heading. role="region" + the heading make it a landmark
 // screen reader users can jump to.
@@ -184,6 +204,8 @@ export default function AdminPage(navigation: PageNavigation) {
   const [bannedVideos, setBannedVideos] = useState<BannedVideo[]>([]);
   const [actions, setActions] = useState<AdminAction[]>([]);
   const [aiTopics, setAiTopics] = useState<AiTopic[]>([]);
+  const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([]);
+  const [failuresOnly, setFailuresOnly] = useState(false);
   // Which row's "Ban" button was pressed, e.g. "user:5" or "video:dQw4w9WgXcQ".
   const [pendingBan, setPendingBan] = useState<string | null>(null);
   const [videoLink, setVideoLink] = useState('');
@@ -204,17 +226,30 @@ export default function AdminPage(navigation: PageNavigation) {
 
   // The parts of the page every ban or unban changes.
   async function refreshSummary() {
-    const [newStats, newBanned, newActions, newTopics] = await Promise.all([
+    const [newStats, newBanned, newActions, newTopics, newEvents] = await Promise.all([
       fetchAdminStats(),
       fetchBannedVideos(),
       fetchAdminActions(),
       fetchAiTopics(),
+      fetchSecurityLog(),
     ]);
     setStats(newStats);
     setBannedVideos(newBanned);
     setActions(newActions);
     setAiTopics(newTopics);
+    setSecurityEvents(newEvents);
   }
+
+  async function reloadSecurityLog() {
+    setError(null);
+    try {
+      setSecurityEvents(await fetchSecurityLog());
+    } catch (err) {
+      handleError(err);
+    }
+  }
+
+  const shownEvents = failuresOnly ? securityEvents.filter((e) => e.outcome === 'failure') : securityEvents;
 
   useEffect(() => {
     if (!user?.admin) return;
@@ -622,6 +657,63 @@ export default function AdminPage(navigation: PageNavigation) {
             ))}
           </TableBody>
         </Table>
+      </AdminSection>
+      
+      <AdminSection
+        id="admin-security-log"
+        title="Security log"
+        description="The latest 100 security events from the server's log file: sign ups, logins, failed logins, blocked requests and admin actions. User is the account id."
+        icon={<ShieldAlert />}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={failuresOnly}
+              onChange={(e) => setFailuresOnly(e.target.checked)}
+            />
+            Failures only
+          </label>
+          <Button variant="outline" size="sm" className="ml-auto" onClick={() => void reloadSecurityLog()}>
+            <RefreshCw aria-hidden="true" />
+            Refresh
+          </Button>
+        </div>
+        <div className="max-h-[28rem] overflow-y-auto rounded-md border">
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead scope="col">Time</TableHead>
+                <TableHead scope="col">Event</TableHead>
+                <TableHead scope="col">Result</TableHead>
+                <TableHead scope="col">User</TableHead>
+                <TableHead scope="col">IP</TableHead>
+                <TableHead scope="col">Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shownEvents.length === 0 && (
+                <EmptyRow columns={6}>{failuresOnly ? 'No failures logged.' : 'Nothing logged yet.'}</EmptyRow>
+              )}
+              {/* Everything here comes from the log file and partly from users (e.g. reasons): text only. */}
+              {shownEvents.map((event, index) => (
+                <TableRow key={`${event.time}-${index}`}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(event.time).toLocaleString()}</TableCell>
+                  <TableCell>{SECURITY_EVENT_LABELS[event.event] ?? event.event}</TableCell>
+                  <TableCell>
+                    <Badge variant={event.outcome === 'failure' ? 'destructive' : 'secondary'}>
+                      {event.outcome === 'failure' ? 'Failed' : 'OK'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{event.user}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{event.ip}</TableCell>
+                  <TableCell className="text-muted-foreground">{event.detail === '-' ? '' : event.detail}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </AdminSection>
     </PageLayout>
   );

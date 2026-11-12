@@ -73,6 +73,7 @@ class AccessControlTest {
             new String[]{"PUT", "/api/admin/banned-videos/video000001", "{\"reason\":\"x\"}"},
             new String[]{"DELETE", "/api/admin/banned-videos/video000001", null},
             new String[]{"GET", "/api/admin/actions", null},
+            new String[]{"GET", "/api/admin/security-log", null},
             new String[]{"GET", "/api/admin/actions/export", null},
             new String[]{"GET", "/api/admin/topics", null},
             new String[]{"DELETE", "/api/admin/topics/1", "{\"reason\":\"x\"}"});

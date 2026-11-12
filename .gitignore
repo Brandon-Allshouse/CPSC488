@@ -37,3 +37,6 @@ dist/
 
 # Local env
 .env
+
+# Security log file written by the backend when run outside Docker (see SecurityLogFile)
+logs/

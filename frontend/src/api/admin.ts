@@ -54,6 +54,18 @@ export interface AdminAction {
   createdAt: string;
 }
 
+// One line of the security log file (SecurityLogFile.java): logins, failed logins, admin actions
+// and denied admin access. user is the account id, and user, ip and detail are "-" when unknown.
+// Every field is plain text from the server log: show it as text only.
+export interface SecurityEvent {
+  time: string;
+  event: string;
+  outcome: 'success' | 'failure';
+  user: string;
+  ip: string;
+  detail: string;
+}
+
 // A topic a user added with the AI topic finder. addedBy is null if that account was deleted;
 // picks is how many users have it as an interest. The name came from the LLM: plain text only.
 export interface AiTopic {
@@ -109,6 +121,12 @@ export async function unbanVideo(youtubeId: string): Promise<void> {
 export async function fetchAdminActions(): Promise<AdminAction[]> {
   const { actions } = await request<{ actions: AdminAction[] }>('/api/admin/actions');
   return actions;
+}
+
+/** The newest entries of the security log file, newest first (the server sends at most 500). */
+export async function fetchSecurityLog(limit = 100): Promise<SecurityEvent[]> {
+  const { events } = await request<{ events: SecurityEvent[] }>(`/api/admin/security-log?limit=${limit}`);
+  return events;
 }
 
 // Only names the backend builds (AuditLogExport.fileName) are used; anything else falls back.
