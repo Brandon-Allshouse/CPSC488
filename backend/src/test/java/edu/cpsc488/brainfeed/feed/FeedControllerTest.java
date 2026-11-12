@@ -76,6 +76,16 @@ class FeedControllerTest {
     }
 
     @Test
+    void savingTooManyInterestsIsRejectedToo() {
+        // the same cap as the feed, checked before anything else so a huge list is cheap to refuse
+        List<Integer> ids = new ArrayList<>();
+        for (int i = 0; i <= FeedController.MAX_TOPICS_PER_REQUEST; i++) {
+            ids.add(1);
+        }
+        assertBadRequest(() -> FeedController.checkTopicIds(ids, REAL_TOPICS));
+    }
+
+    @Test
     void duplicateTopicsAreRemoved() {
         assertEquals(List.of(2, 1), List.copyOf(FeedController.checkTopicIds(List.of(2, 1, 2), REAL_TOPICS)));
     }

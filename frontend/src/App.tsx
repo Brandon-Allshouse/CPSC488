@@ -22,20 +22,30 @@ type Session =
   | { kind: 'guest' } // chose "Continue as guest"; exists only in the browser, nothing saved
   | { kind: 'user'; user: User }; // logged in
 
+/**
+ * The whole app. Works out who's using it (logged in, guest or nobody) and shows the login page,
+ * the interests picker or the feed.
+ */
 export default function App() {
   const [session, setSession] = useState<Session>({ kind: 'loading' });
   // Topic ids the feed is built from. null while a logged-in user's saved interests are loading.
   // Guests' interests only live here, so they're gone after a page reload.
   const [interests, setInterests] = useState<number[] | null>(null);
   const [editingInterests, setEditingInterests] = useState(false);
+  // Set when a logged-in user's saved interests couldn't be loaded, so the picker says why it's empty.
+  const [interestsNotice, setInterestsNotice] = useState<string | undefined>(undefined);
 
   function startUserSession(user: User) {
     setSession({ kind: 'user', user });
     setInterests(null);
-    // If loading fails, show the picker; saving there replaces whatever was stored.
+    setInterestsNotice(undefined);
+    // If loading fails, show the picker; saving there replaces whatever was stored, so say so.
     fetchMyInterests()
       .then(setInterests)
-      .catch(() => setInterests([]));
+      .catch(() => {
+        setInterestsNotice("Couldn't load your saved interests. Pick them again, or refresh the page to try again.");
+        setInterests([]);
+      });
   }
 
   // On page load, restore an existing login. The session cookie is HttpOnly, so the page can't
@@ -60,6 +70,7 @@ export default function App() {
     // Logged-in users' picks are saved on the server; guests' stay in the browser.
     const saved = session.kind === 'user' ? await saveMyInterests(topicIds) : topicIds;
     setInterests(saved);
+    setInterestsNotice(undefined);
     setEditingInterests(false);
   }
 
@@ -89,6 +100,7 @@ export default function App() {
             onSave={handleSaveInterests}
             onCancel={interests.length > 0 ? () => setEditingInterests(false) : undefined}
             isGuest={user === null}
+            notice={interestsNotice}
           />
         );
       }

@@ -13,6 +13,7 @@ export interface User {
   admin: boolean;
 }
 
+/** Logs in. The backend sets the session cookie; this returns who logged in. */
 export async function login(email: string, password: string): Promise<User> {
   const { user } = await request<{ user: User }>('/api/auth/login', {
     method: 'POST',
@@ -21,6 +22,7 @@ export async function login(email: string, password: string): Promise<User> {
   return user;
 }
 
+/** Makes a new account and logs it in. */
 export async function register(email: string, username: string, password: string): Promise<User> {
   const { user } = await request<{ user: User }>('/api/auth/register', {
     method: 'POST',
@@ -29,6 +31,7 @@ export async function register(email: string, username: string, password: string
   return user;
 }
 
+/** Ends this session on the server and clears the cookie. */
 export async function logout(): Promise<void> {
   await request<void>('/api/auth/logout', { method: 'POST' });
 }

@@ -26,6 +26,7 @@ interface Props {
   /** The original private saved-video list, separate from playlists. */
   onToggleSaved?: (video: FeedVideo) => void | Promise<void>;
   feedback?: VideoFeedback | null;
+  /** Saves a thumbs choice. Throws on failure; the card shows the message under its title. */
   onFeedbackChange?: (youtubeId: string, feedback: VideoFeedback | null) => Promise<void>;
   /** Outlines the card, to show which video was just opened from "Your videos". */
   highlighted?: boolean;
@@ -37,6 +38,8 @@ interface Props {
   onTogglePlaylist?: (youtubeId: string, playlistId: number, save: boolean) => Promise<void>;
   /** Makes a new playlist with this video in it. Throws on failure (e.g. name taken). */
   onCreatePlaylist?: (youtubeId: string, name: string) => Promise<void>;
+  /** Opens the leaderboard from the quiz in the summary box. */
+  onShowLeaderboard?: () => void;
 }
 
 /** The card's element id, so the feed can scroll to a video. YouTube ids are URL-safe already. */
@@ -79,8 +82,10 @@ function FeedbackButton({ kind, label, tooltipId, pressed, disabled, onClick }: 
   );
 }
 
-// One video in the feed. Shows the thumbnail until the user presses play, so scrolling past
-// videos doesn't load a YouTube player (and its trackers) for every one of them.
+/**
+ * One video in the feed: thumbnail (the player loads only after play is pressed, so scrolling past
+ * videos doesn't load YouTube's trackers), title, thumbs, bookmark menu, links and the summary box.
+ */
 export default function VideoCard({
   video,
   topicName,
@@ -94,12 +99,14 @@ export default function VideoCard({
   playlists,
   onTogglePlaylist,
   onCreatePlaylist,
+  onShowLeaderboard,
 }: Props) {
   const notebook = canSave && onToggleSaved ? { saved, onToggle: () => onToggleSaved(video) } : undefined;
   const canUsePlaylists = playlists !== undefined && onTogglePlaylist !== undefined && onCreatePlaylist !== undefined;
   const published = timeAgo(video.publishedAt);
   const [playing, setPlaying] = useState(false);
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const cardRef = useRef<HTMLElement>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -141,8 +148,12 @@ export default function VideoCard({
   async function changeFeedback(next: VideoFeedback | null) {
     if (!onFeedbackChange) return;
     setSavingFeedback(true);
+    setFeedbackError(null);
     try {
       await onFeedbackChange(video.youtubeId, next);
+    } catch (err) {
+      // Shown on this card, not at the top of the feed, which is usually scrolled out of view.
+      setFeedbackError(err instanceof Error ? err.message : 'Could not save your choice. Try again.');
     } finally {
       setSavingFeedback(false);
     }
@@ -237,6 +248,11 @@ export default function VideoCard({
             )}
           </div>
         </div>
+        {feedbackError && (
+          <p className="video-feedback-error text-sm text-destructive" role="alert">
+            {feedbackError}
+          </p>
+        )}
         <div className="video-meta flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
           <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
             <span
@@ -272,7 +288,7 @@ export default function VideoCard({
           </span>
         </div>
         {/* Pressing play starts writing the summary, so it's usually ready by the end of the video. */}
-        <StudyBox youtubeId={video.youtubeId} autoStart={playing} />
+        <StudyBox youtubeId={video.youtubeId} autoStart={playing} onShowLeaderboard={onShowLeaderboard} />
       </section>
     </article>
   );

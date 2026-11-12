@@ -15,6 +15,7 @@ const LANGUAGES = [
   { code: 'ja', label: '日本語' },
 ];
 
+/** The language dropdown on the interests page. Remembers the pick but doesn't translate yet. */
 export default function LanguageSelect() {
   const [language, setLanguage] = useState('en');
   return (

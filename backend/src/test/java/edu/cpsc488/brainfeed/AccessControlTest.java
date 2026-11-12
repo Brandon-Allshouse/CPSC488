@@ -8,6 +8,7 @@ import edu.cpsc488.brainfeed.auth.PasswordPolicy;
 import edu.cpsc488.brainfeed.auth.SessionRepository;
 import edu.cpsc488.brainfeed.auth.UserRepository;
 import edu.cpsc488.brainfeed.db.TestDatabase;
+import edu.cpsc488.brainfeed.export.ExportController;
 import edu.cpsc488.brainfeed.feed.FeedController;
 import edu.cpsc488.brainfeed.feed.PlaylistController;
 import edu.cpsc488.brainfeed.feed.PlaylistRepository;
@@ -15,13 +16,16 @@ import edu.cpsc488.brainfeed.feed.TopicRepository;
 import edu.cpsc488.brainfeed.feed.VideoRepository;
 import edu.cpsc488.brainfeed.history.WatchHistoryController;
 import edu.cpsc488.brainfeed.history.WatchHistoryRepository;
+import edu.cpsc488.brainfeed.progress.LeaderboardController;
+import edu.cpsc488.brainfeed.progress.LeaderboardRepository;
 import edu.cpsc488.brainfeed.saved.SavedVideoController;
 import edu.cpsc488.brainfeed.saved.SavedVideoRepository;
 import edu.cpsc488.brainfeed.saved.StudyNoteController;
 import edu.cpsc488.brainfeed.saved.StudyNoteRepository;
 import edu.cpsc488.brainfeed.topics.AiTopicRepository;
-import edu.cpsc488.brainfeed.topics.TopicSuggestionController;
-import edu.cpsc488.brainfeed.topics.TopicSuggestions;
+import edu.cpsc488.brainfeed.topics.TopicFinder;
+import edu.cpsc488.brainfeed.topics.TopicFinderController;
+import edu.cpsc488.brainfeed.topics.TopicReviewer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,8 +60,7 @@ class AccessControlTest {
             new String[]{"PUT", "/api/me/watch-history/video000001", null},
             new String[]{"DELETE", "/api/me/watch-history/video000001", null},
             new String[]{"DELETE", "/api/me/watch-history", null},
-            new String[]{"POST", "/api/me/topic-suggestions", "{\"text\":\"space\"}"},
-            new String[]{"POST", "/api/me/topics", "{\"key\":\"abc\"}"},
+            new String[]{"POST", "/api/me/topics", "{\"name\":\"Black Holes\"}"},
             new String[]{"GET", "/api/auth/me", null});
 
     static final List<String[]> ADMIN_ROUTES = List.of(
@@ -71,6 +74,7 @@ class AccessControlTest {
             new String[]{"DELETE", "/api/admin/banned-videos/video000001", null},
             new String[]{"GET", "/api/admin/actions", null},
             new String[]{"GET", "/api/admin/security-log", null},
+            new String[]{"GET", "/api/admin/actions/export", null},
             new String[]{"GET", "/api/admin/topics", null},
             new String[]{"DELETE", "/api/admin/topics/1", "{\"reason\":\"x\"}"});
 
@@ -91,9 +95,13 @@ class AccessControlTest {
             new SavedVideoController(new SavedVideoRepository(data), auth).register(routes);
             new StudyNoteController(new StudyNoteRepository(data), auth).register(routes);
             new AdminController(new AdminRepository(data), auth).register(routes);
+            new ExportController(new AdminRepository(data), auth).register(routes);
             new WatchHistoryController(new WatchHistoryRepository(data, WatchHistoryController.LIMIT), auth).register(routes);
             new PlaylistController(new PlaylistRepository(data), auth).register(routes);
-            new TopicSuggestionController(new TopicSuggestions(new AiTopicRepository(data), null), auth).register(routes);
+            AiTopicRepository aiTopics = new AiTopicRepository(data);
+            new LeaderboardController(new LeaderboardRepository(data), auth).register(routes);
+            new TopicFinderController(new TopicFinder(aiTopics), new TopicReviewer(aiTopics, null, Runnable::run),
+                    ids -> false, auth).register(routes);
         });
     }
 
@@ -129,5 +137,7 @@ class AccessControlTest {
         // topics and the feed are public on purpose, so guests can browse (SECURITY.md)
         assertEquals(200, server.get("/api/topics").statusCode());
         assertEquals(200, server.get("/api/feed?topics=1&seed=1&page=0").statusCode());
+        // public so guests can see who's ahead; it only ever shows usernames and scores
+        assertEquals(200, server.get("/api/leaderboard").statusCode());
     }
 }

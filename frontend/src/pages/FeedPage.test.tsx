@@ -60,6 +60,13 @@ vi.mock('../api/feed', () => ({
 
 // The Up next column repeats the feed's titles; it has its own tests in UpNext.test.tsx.
 vi.mock('../components/UpNext', () => ({ default: () => null }));
+vi.mock('../api/leaderboard', () => ({
+  fetchLeaderboard: vi.fn().mockResolvedValue({
+    weekStart: '2026-11-09T00:00:00Z',
+    week: { top: [], you: null },
+    allTime: { top: [], you: null },
+  }),
+}));
 
 // The sidebar has the same buttons as the Profile menu, so pick the menu's copy.
 function menuItem(name: string) {
@@ -326,6 +333,40 @@ describe('FeedPage', () => {
     await waitFor(() => expect(like.getAttribute('aria-pressed')).toBe('false'));
   });
 
+  it('shows a failed thumbs save on that video and keeps the old choice', async () => {
+    vi.mocked(saveMyVideoFeedback).mockRejectedValue(new ApiError(500, 'Something went wrong on our end.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    const like = await screen.findByRole('button', { name: 'I liked this video' });
+    fireEvent.click(like);
+    const card = like.closest('article')!;
+    expect((await within(card).findByRole('alert')).textContent).toBe('Something went wrong on our end.');
+    expect(like.getAttribute('aria-pressed')).toBe('false');
+    expect(onLogout).not.toHaveBeenCalled();
+  });
+
+  it('sends the user to log in again if their session expired while saving a thumbs choice', async () => {
+    vi.mocked(saveMyVideoFeedback).mockRejectedValue(new ApiError(401, 'Not logged in.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'I liked this video' }));
+    await vi.waitFor(() => expect(onLogout).toHaveBeenCalled());
+  });
+
+  it("says so when the user's likes and dislikes couldn't load, but still shows the feed", async () => {
+    vi.mocked(fetchMyVideoFeedback).mockRejectedValue(new ApiError(500, 'Something went wrong on our end.'));
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
+    const { scrollToBottom } = renderFeed();
+    scrollToBottom();
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Something went wrong on our end.');
+    expect(await screen.findByText('Test video 1')).toBeTruthy();
+  });
+
   it('takes a guest to login instead of saving video feedback', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [makeVideo(1)], nextPage: null, fetching: false });
     const { scrollToBottom } = renderFeed(null);
@@ -485,7 +526,7 @@ describe('FeedPage', () => {
     expect(onLogout).toHaveBeenCalled();
   });
 
-  it('opens the blank leaderboard screen and returns to the feed', () => {
+  it('opens the leaderboard and returns to the feed', async () => {
     vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
     renderFeed();
 
@@ -493,7 +534,7 @@ describe('FeedPage', () => {
     fireEvent.click(menuItem('Leaderboard'));
 
     expect(screen.getByRole('heading', { name: 'Leaderboard' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Leaderboard information' })).toBeTruthy();
+    expect(await screen.findByText('Nobody has points this week')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Update leaderboard' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Back to feed' }));
     expect(menuItem('Interests')).toBeTruthy();
@@ -836,5 +877,17 @@ describe('suggestSubjects', () => {
 
   it('suggests nothing when every subject is already picked', () => {
     expect(suggestSubjects(topics, [1, 2, 3, 4], 7)).toEqual([]);
+  });
+
+  it('opens the Study notebook straight from the Profile menu', async () => {
+    vi.mocked(fetchFeed).mockResolvedValue({ videos: [], nextPage: null, fetching: false });
+    vi.mocked(fetchSavedVideos).mockResolvedValue([{ ...makeVideo(92), title: 'Notebook lesson' }]);
+    Element.prototype.scrollIntoView = vi.fn();
+    renderFeed();
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(menuItem('Study notebook'));
+    expect(screen.getByRole('heading', { name: 'Your videos' })).toBeTruthy();
+    expect(await within(screen.getByRole('region', { name: 'Study notebook' })).findByRole('button', { name: 'Notebook lesson' })).toBeTruthy();
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
   });
 });

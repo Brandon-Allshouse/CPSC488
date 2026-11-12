@@ -47,6 +47,15 @@ class LoginRateLimiterTest {
     }
 
     @Test
+    void keysNeverSeenArentLimitedAndCanBeReset() {
+        LoginRateLimiter limiter = new LoginRateLimiter(1, Duration.ofMinutes(15));
+        assertFalse(limiter.isLimited("ip:203.0.113.7"));
+        // a correct login for someone with no failures just does nothing
+        limiter.reset("ip:203.0.113.7");
+        assertFalse(limiter.isLimited("ip:203.0.113.7"));
+    }
+
+    @Test
     void windowIsWhatWePassedIn() {
         LoginRateLimiter limiter = new LoginRateLimiter(10, Duration.ofMinutes(15));
         assertEquals(Duration.ofMinutes(15), limiter.window());

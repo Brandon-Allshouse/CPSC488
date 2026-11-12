@@ -25,6 +25,8 @@ replay_pid*
 
 # Maven / IDE
 target/
+# Extra build folders from parallel test runs (-Dbrainfeed.buildDir=target-x)
+target-*/
 .idea/
 *.iml
 .vscode/

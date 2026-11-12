@@ -67,12 +67,14 @@ services:
       - llm
 
   # Runs a free, open LLM on this laptop for video summaries and quizzes, so it costs nothing and
-  # no API key is needed. It uses the CPU, so the first summary after it's been idle takes longer
-  # while the model loads. Ollama has no login, so it gets no port: only the backend can reach it.
+  # no API key is needed. It uses the CPU, so loading the model takes ~10 seconds; the backend
+  # loads it when it starts and when someone opens the feed, so people rarely wait for that.
+  # Ollama has no login, so it gets no port: only the backend can reach it.
   ollama:
     image: ollama/ollama:0.40.11
     environment:
-      # Keep the model in memory for 30 minutes after the last summary, then free the RAM.
+      # Keep the model in memory for 30 minutes after the last summary, then free the RAM. The
+      # backend also sends this with every request (OllamaClient.KEEP_ALIVE); this is the fallback.
       OLLAMA_KEEP_ALIVE: 30m
       # One summary at a time (the backend sends them one by one anyway) and one model loaded.
       OLLAMA_NUM_PARALLEL: "1"
@@ -166,6 +168,8 @@ services:
       # The repository tests run against a real Postgres: a separate brainfeed_test database on
       # the db service, recreated each run, so your real data is never touched (TestDatabase.java).
       TEST_DB_URL: jdbc:postgresql://db:5432/
+      # Optional: a different test database name, so two test runs at once don't collide.
+      TEST_DB_NAME: ${TEST_DB_NAME:-}
       TEST_DB_USER: ${DB_USER:-brainfeed}
       TEST_DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env - copy .env.example to .env}
       # Fail instead of skipping them if the database can't be reached.

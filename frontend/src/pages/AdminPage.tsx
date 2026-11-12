@@ -3,6 +3,7 @@ import {
   Ban,
   CircleAlert,
   CircleCheck,
+  Download,
   Film,
   History,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 import {
   banUser,
   banVideo,
+  downloadAuditLog,
   fetchAdminActions,
   fetchAdminStats,
   fetchAiTopics,
@@ -210,6 +212,7 @@ export default function AdminPage(navigation: PageNavigation) {
   const [videoLinkReason, setVideoLinkReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   function handleError(err: unknown) {
     if (err instanceof ApiError && err.status === 401) {
@@ -267,6 +270,20 @@ export default function AdminPage(navigation: PageNavigation) {
       await Promise.all([refreshSummary(), reload()]);
     } catch (err) {
       handleError(err);
+    }
+  }
+
+  async function exportAuditLog() {
+    setError(null);
+    setNotice(null);
+    setDownloading(true);
+    try {
+      await downloadAuditLog();
+      setNotice('Downloaded the audit log as a CSV file.');
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -605,6 +622,12 @@ export default function AdminPage(navigation: PageNavigation) {
       </AdminSection>
 
       <AdminSection id="admin-actions" title="Recent admin actions" icon={<History />}>
+        <div className="mb-3 flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => void exportAuditLog()} disabled={downloading}>
+            <Download aria-hidden="true" />
+            {downloading ? 'Preparing file...' : 'Download full log (CSV)'}
+          </Button>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>

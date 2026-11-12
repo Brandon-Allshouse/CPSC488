@@ -22,19 +22,26 @@ pulled mainly from YouTube (possibly TikTok/Instagram later on for extra content
 - Pick interests up front, change them whenever: a whole subject (Math), just part of it (Algebra 2),
   or every subject at once with "Select all subjects"
 - Scrollable feed of educational videos
-- Thumbs up / down on videos to improve what you're shown, and a private list of liked and disliked
-  videos where clicking a title takes you back to that video in your feed
+- Thumbs up / down on videos, kept in a private list of liked and disliked videos where clicking a
+  title takes you back to that video in your feed (using them to tune the feed is next on the roadmap)
 - Save videos with the bookmark button: every account has a "Watch later" playlist, and you can make
   your own playlists. They're all on the "Your videos" page in the Profile menu
-- Less content from creators/channels you've marked as not interesting
+- A Study notebook: save videos to it from the same bookmark button, write a private note on each,
+  search your notes, and download them as a text file. Open it from "Study notebook" in the
+  Profile menu or the sidebar (it's the top section of Your videos, Saved tab)
 - Preferences and history saved for registered users: a private watch history of the last 25 videos
   you pressed play on
-- A random/discovery feed to branch out into new topics
+- A new shuffle of your feed every visit, plus "Explore more subjects" suggestions you can add in
+  one click
 - A short summary and a 2-question quiz under every video, written by a free AI model that runs on
   your own laptop (no API key, no cost)
-- Find topics with AI: type a few keywords or examples ("black holes", "like the Cold War") and pick
-  from matching topics, or add new ones we don't have yet (signed-in users)
-- Admin page: ban users, blacklist videos, remove topics added with AI, and see a log of every admin action
+- Quiz scoring and a leaderboard: 10 points for each question you get right the first time, a daily
+  streak, and a weekly and all-time top 20 with your own rank (signed-in users; guests can still
+  check their answers)
+- Add any topic: type one to three words ("black holes", "guitar") and press Enter. You get the
+  topic we have, or a new one made on the spot, in about a second; an AI checks new ones afterwards
+  (signed-in users; guests can pick topics we already have)
+- Admin page: ban users, blacklist videos, remove topics users added, and see a log of every admin action
 
 ## Stack (subject to change)
 
@@ -67,25 +74,31 @@ backend/                      Java backend (Maven project; Dockerfile builds and
   src/main/java/.../admin/      admin page endpoints: user bans, video blacklist, admin action log
   src/main/java/.../history/    watch history: the last 25 videos each user pressed play on
   src/main/java/.../llm/        the Ollama client and the cleaning used on text going to and from the model
-  src/main/java/.../study/      video summaries and quizzes: prompt, output checks and work queue
-  src/main/java/.../topics/     the AI topic finder: prompt, output checks, limits and adding topics
+  src/main/java/.../study/      video summaries and quizzes: prompt, output checks, work queue and answer checks
+  src/main/java/.../progress/   quiz scoring (first answers, points, streaks) and the leaderboard
+  src/main/java/.../topics/     adding typed topics (name checks, matching, denylist, limits) and their AI review
   src/main/resources/db/migration/   database schema (Flyway SQL files)
   src/test/                     unit tests (JUnit)
 frontend/                     React app (Vite project)
-  src/pages/                    LoginPage, InterestsPage, FeedPage, YourVideosPage (playlists, liked, disliked), WatchHistoryPage, LeaderboardPage (placeholder), AdminPage
+  src/pages/                    LoginPage, InterestsPage, FeedPage, YourVideosPage (playlists, liked, disliked), WatchHistoryPage, LeaderboardPage, AdminPage
   src/components/layout/        page templates: PageLayout (signed-in pages), AuthLayout (login/interests)
   src/components/ui/            shadcn/ui building blocks: Button, Card, Input, Label, Badge, Table, Alert
   src/components/               VideoCard (one video in the feed), FeedHeader (logo and Profile menu),
                                 FeedSidebar and UpNext (the feed's left and right columns on wide screens),
                                 ThemeToggle (light/dark switch),
-                                SaveMenu (a video's bookmark button and "Save to…" playlist menu),
+                                SaveMenu (a video's bookmark button: Study notebook and playlists),
                                 StudyBox (a video's summary and quiz),
-                                TopicFinder ("Find topics with AI" on the interests page),
+                                StudyNotebook (notebook videos and their notes on "Your videos"),
+                                StatTile (the summary numbers on Watch history and Your videos),
+                                ProductPitch (what BrainFeed does, beside the login form),
+                                TopicFinder (the "Type a topic" box on the interests page),
                                 LanguageSelect (language picker on the interests page; UI only for now)
   src/styles/index.css          color theme, base font settings and animations (everything else is Tailwind classes)
   src/assets/                   images bundled into the app (BrainFeed logo, also the favicon)
-  src/api/                      typed calls to the backend
+  src/api/                      typed calls to the backend, all through request() in api/client.ts
+  src/lib/                      small helpers: dates, progress numbers, theme, notebook search and download
   src/**/*.test.ts(x)           unit tests (Vitest), next to the file they test
+  src/test/                     test helpers (a fake IntersectionObserver for scrolling)
 docker-compose.yml            runs the whole app locally: database, backend, frontend
 .env.example                  template for your local settings and secrets
 SECURITY.md                   security requirements. Read before touching auth code
@@ -209,7 +222,7 @@ the vulnerability database, which takes a while; later runs reuse it.
   are three kinds:
   - **Plain unit tests** for logic. Keep logic that's worth testing in small methods, like
     `FeedController.parseFeedQuery`, or use fake subclasses (see `FeedRefresherTest`,
-    `TopicSuggestionsTest`). There's no mocking library; for Javalin's `Context`, a
+    `TopicReviewerTest`). There's no mocking library; for Javalin's `Context`, a
     `java.lang.reflect.Proxy` stand-in is enough (see `RequestBodiesTest`).
   - **Database tests** for every repository class (`*RepositoryTest`). They run our real SQL
     against Postgres through `db/TestDatabase`, which uses its own `brainfeed_test` database
@@ -278,10 +291,11 @@ and even-numbered Node versions. The versions in between only get about six mont
 | Backend: Flyway `Validate failed: Migration checksum mismatch` | A migration file changed after it ran on your database. Reset with `docker compose down -v`. Never edit a migration others have run; add a new one. |
 | `port is already allocated` (5432, 7070 or 5173) | Something else is using that port. For 5432 it's usually a separately installed PostgreSQL: stop it in the Services app (`postgresql-x64-…`). For 7070/5173, close any backend or `npm run dev` you started outside Docker. |
 | Login page shows `Request failed (500)`, and frontend logs show `ECONNREFUSED` | The backend isn't running or crashed. Look for the error in the `backend-1` lines, or run `docker compose logs backend`. |
+| The page says `Couldn't reach BrainFeed. Check your connection and try again.` | The browser got no answer at all, so the frontend container itself is down (or you're offline). Run `docker compose up` and refresh. |
 | Frontend edits don't show up | Wait a second (changes are detected by polling), then refresh. If still stuck, `Ctrl+C` and `docker compose up`. |
 | `Too many failed login attempts` while testing | 10 wrong passwords in 15 minutes blocks your IP (see `LoginThrottle`). The limits are kept in memory, so run `docker compose restart backend`. |
 | Video Summary says "The summary writer isn't running right now" | Right after the first `docker compose up`, the model is still downloading: wait for `ollama-pull-1` to print `success`. Otherwise run `docker compose logs ollama ollama-pull` and `docker compose logs backend` (look for `Study material paused`). If the model is missing, `docker compose up -d ollama-pull` downloads it again. |
-| "Find topics with AI" says the finder isn't running | Same cause as the row above: Ollama is down or the model is still downloading. Picking from the list still works. |
+| New topics stay under "Explore" | The AI review moves them to a better subject, so Ollama is down or the model is still downloading (same fix as the row above). Waiting topics are reviewed the next time the backend starts. Adding topics still works without it. |
 | `docker compose run --rm backend-tests` fails with `Couldn't create the test database` | The database tests need the `db` service. Run `docker compose up -d db` and try again. If `DB_PASSWORD` changed since the database was created, see the `password authentication failed` row. |
 | Summaries are very slow, or Docker runs out of memory | The model runs on the CPU and needs about 4 GB of free RAM. Close other heavy apps, and in Docker Desktop → Settings → Resources give it at least 8 GB. The first summary after 30 idle minutes is slower because the model has to load again. |
 | Sign-up hangs a few seconds with no internet | The breached-password check is timing out. Set `PASSWORD_BREACH_CHECK=false` in `.env` while offline, and restart. |
@@ -353,8 +367,10 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **Video Summary** (under each video): pressing play, or "Summarize and quiz me", asks for the
   video's summary and 2 quiz questions. The first time anyone asks for a video it takes 10-60
   seconds while the model writes it; after that it's saved and shows up instantly for everyone.
-  Picking an answer shows whether it's right and why; "Retake" clears the answers. Built in
-  `StudyBox.tsx`. Quiz answers aren't saved anywhere yet.
+  Picking an answer sends it to the backend, which says whether it's right and why. Signed-in users
+  see "+10 points" for a right first answer and their streak; guests see "Log in to earn points".
+  "Retake" clears the answers (retakes are checked but never score again), and "See the
+  leaderboard" opens the leaderboard. Built in `StudyBox.tsx`.
 - **Under each video:** "YouTube" opens the video on youtube.com in a new tab, and "Copy link"
   copies that link. Copying needs https or localhost; otherwise the button says "Couldn't copy".
 - **Summary tiles** at the top of Watch history (videos watched, today, channels, top channel) and
@@ -363,20 +379,25 @@ color there changes it everywhere. Icons come from [lucide-react](https://lucide
 - **Login page:** on screens 1024px and wider, a panel next to the form says what BrainFeed does
   (`ProductPitch.tsx`). It lists only features that exist, and its subject counts come from
   `/api/topics`, so they're always real. Add features to it as they ship, not before.
-- **Find topics with AI** (interests page, signed-in users): type a few keywords or examples and
-  press "Find topics". In a few seconds it shows topics we already have that fit ("Already on
-  BrainFeed", click to pick) and new topics it suggests ("Add" puts it in the catalog for everyone,
-  picks it for you, and opens its subject so you can see it). Topics added this way have a small
-  sparkle next to their name. Built in `TopicFinder.tsx`; guests see a line asking them to log in.
-  Naming a specific exam, certification or course works too: "security+ certification" gives
-  "CompTIA Security+", whose videos are searched as "CompTIA Security+ exam prep". The model is told
-  to keep the exact thing asked for and only add broader topics after it (`TopicPrompt.SYSTEM`).
-  After changing that prompt, try a few requests against the running app; the unit tests can't
-  check what the model actually answers.
-- **Interests page:** the search box filters subjects and sub-subjects as you type and opens the
-  subjects that match. Picks made before searching are kept.
-- **Leaderboard:** still a placeholder, but it now explains how scoring will work. It never shows
-  example rankings, so nobody mistakes them for real people.
+- **Type a topic** (interests page, `TopicFinder.tsx`): one box. As you type, topics we already
+  have are suggested from the list the page loaded (no request per keystroke; arrow keys and
+  click work) and the subject list below narrows to match. Enter (or "Add") picks it:
+  - a topic we have, even in another case or plural ("black hole"), is picked right away in the
+    browser: "Added Algebra 2 to your topics" or "You already follow Algebra 2"
+  - anything else goes to `POST /api/me/topics`, which answers in well under a second. A likely
+    typo picks the close topic ("calculas" gives Calculus) with an "Add “calculas” instead" button;
+    otherwise the topic is made on the spot under a quick guess at its subject (a keyword list,
+    then words shared with topics we have, else **Explore**), followed for you, and its YouTube
+    search starts right away. Signed-in users only; guests are asked to log in.
+  - in the background the model then reviews it (`TopicReviewer`): it moves it to a better
+    subject (or a new one, like "Cooking"), writes a better YouTube search ("CompTIA Security+
+    exam prep"), and removes it if it's harmful. After changing that prompt
+    (`TopicPrompt.SYSTEM`), try a few topics against the running app; the unit tests can't check
+    what the model actually answers.
+  Topics users added have a small sparkle next to their name. Picks made while typing are kept.
+- **Leaderboard:** the top 20 by quiz points, with a "This week" / "All time" toggle, your own
+  rank, points, right answers and streak (even outside the top 20), and "Update leaderboard" to
+  reload. Guests see the board and a line asking them to log in. Built in `LeaderboardPage.tsx`.
 - **Keyboard:** ↓ or J for the next video, ↑ or K for the previous one. The Profile menu closes with
   Escape or a click outside it.
 
@@ -542,6 +563,8 @@ fetched in two ways:
 - **When someone opens the feed for a topic that has never been searched**, it's searched right
   away. The feed shows "Finding videos for these topics..." and checks again every few seconds
   until they arrive, which usually takes under 10 seconds. At most 5 new topics are fetched per request.
+  Typing a topic on the interests page starts the same search as soon as it's added, so its
+  videos are usually ready by the time the feed opens.
 - **Every hour**, up to 3 topics that haven't been refreshed in a week are searched again, picked
   topics first.
 
@@ -552,19 +575,49 @@ no videos yet, and they get fetched the next day.
 
 ### Video summaries and quizzes
 
-Summaries and quizzes (and the AI topic finder) use a free, open model running in the `ollama`
+Summaries and quizzes (and reviews of new topics) use a free, open model running in the `ollama`
 container, on your own CPU. There's nothing to sign up for and no API key. `docker compose up` starts it, and
 `ollama-pull` downloads the model the first time.
 
 - **What it reads:** the video's title, channel, topic and YouTube description (one extra YouTube
   call, 1 quota unit). It can't watch or hear the video, so the summary is only as good as the
   description, which is why the box says it was written by AI and can get things wrong.
-- **When it runs:** only when someone presses play or "Summarize and quiz me", never while
-  scrolling. One video at a time; each takes about 10-60 seconds depending on the laptop. Each video
-  is written once, saved in `video_study`, and shared by everyone.
-- **Limits:** at most 20 videos waiting and 500 written per 24 hours (counted in the database). If
-  the model's answer fails our checks it gets one more try; a video that fails twice is skipped for
-  6 hours. If Ollama is down, new requests pause for a minute.
+- **When it runs:** when someone presses play or "Summarize and quiz me", and ahead of time for the
+  first 5 videos of each feed page the backend serves, so a quiz is often ready before anyone gets
+  to it. One video at a time, about 10 seconds each on a laptop CPU (more on slower ones). Someone
+  who pressed play goes ahead of the ones written ahead of time. Each video is written once, saved
+  in `video_study`, and shared by everyone.
+- **Limits:** at most 20 videos waiting and 500 written per 24 hours (counted in the database). The
+  ones written ahead of time have smaller limits of their own: 8 of the 20 places in line, 30 an
+  hour per IP, and none once 300 were written that day, so the rest is kept for people who asked.
+  If the model's answer fails our checks it gets one more try; a video that fails twice is skipped
+  for 6 hours. If Ollama is down, new requests pause for a minute.
+- **Why it's faster now:** we timed real videos from our database against Ollama (gemma4:e4b, CPU
+  only), before and after. Writing the reply is ~80% of the time (about 25 tokens a second), so
+  the changes cut what the model reads and writes, and move the waiting to where nobody sees it:
+  - The description is cleaned first (`DescriptionCleaner`): links, hashtags, timestamps, emoji,
+    "subscribe"/social/sponsor lines and repeats are removed, then only sentences near the top or
+    sharing words with the title and topic are kept, up to 1,000 characters.
+  - The model is asked for one-line JSON (it used to indent it, which costs tokens), and summary
+    replies are capped at 1,024 tokens.
+  - The backend loads the model when it starts, so the first person doesn't wait ~11 seconds for
+    that. Every request sends the same `num_ctx` (4,096) and `keep_alive` (30 minutes): we tried
+    2,048 and it wasn't faster per token, and any change makes Ollama reload the model.
+  - Feed pages line up their first videos at low priority (above).
+
+  | Measured (same laptop, same day) | Before | After |
+  |---|---|---|
+  | Prompt tokens per video (8 new videos, side by side) | 457 | 392 |
+  | Reply tokens per video | 264 | 202 |
+  | Seconds per video, model already loaded | 13.3 | 10.7 |
+  | First quiz after a restart, pressing play right away | 29.2 s (12.5 s of it loading the model) | 12.3 s |
+  | Waiting after pressing play, 6 videos watched 15 s each | 12.2 s average | 5.9 s average (two were ready instantly) |
+
+  The last row's "before" is without the warm-up and the feed prefetch (the new prompt either way);
+  the sixth video wasn't one of the page's first 5. All 44 replies we checked passed `StudyParser`
+  with both questions, and the summaries still only use facts from the description. Every Ollama
+  reply's timings (load, prompt and reply tokens and seconds, never the text) are in the backend
+  log as `Ollama reply: ...`.
 - **Changing the model:** set `OLLAMA_MODEL` in `.env`, then `docker compose up -d ollama-pull` and
   `docker compose restart backend`. Models already written keep their old summary (the
   `video_study.model` column says which model wrote it); to redo them, delete those rows in psql.
@@ -640,8 +693,8 @@ All request and response bodies are JSON. Errors look like `{ "error": "message 
 
 `user` is `{ id, email, username, createdAt, admin }`. Other error codes: `400` invalid input, `403`
 account banned (login only, and only after the right password), `409` email or username taken, `429`
-too many attempts. Every POST and PUT must send `Content-Type: application/json`
-(the frontend's `request()` helper in `api/client.ts` does this).
+too many attempts. Every POST, PUT and DELETE must send `Content-Type: application/json`
+(the frontend's `request()` helper in `api/client.ts` does this for every non-GET request).
 
 ## Feed API
 
@@ -658,7 +711,7 @@ too many attempts. Every POST and PUT must send `Content-Type: application/json`
 Topics come in two levels. A subject (Math) has `parentId: null`; a sub-subject (Algebra 2) has its
 subject's id. Asking for a subject's id in `/api/feed` or saving it as an interest includes all
 of its sub-subjects. The list comes back with subjects first (A to Z), then sub-subjects in the
-order they're usually learned. `ai` is true for topics a user added with the AI topic finder (see
+order they're usually learned. `ai` is true for topics a user added by typing them (see
 "Topic finder API"). To add a seeded topic, insert a row in a new migration (see
 `V4__subjects_and_subtopics.sql`).
 
@@ -668,7 +721,9 @@ and that search is happening now, so ask for page 0 again in a few seconds.
 A `video` is `{ youtubeId, title, channelTitle, topicId, publishedAt }`. Pages hold 10 videos. The
 feed comes in a shuffled order, and the same `seed` always gives the same order, so keep it while
 scrolling. Videos are served from our database (filled once a day per topic by `FeedRefresher`),
-so browsing never spends YouTube quota. Video feedback requires a signed-in account and is private
+so browsing never spends YouTube quota (apart from the description lookups for summaries written
+ahead of time: serving a page also lines up summaries for its first 5 videos in the background, see
+"Video summaries and quizzes"). Video feedback requires a signed-in account and is private
 to that account. The feedback endpoint returns saved videos as `{ youtubeId, title, creator }`;
 guests are asked to log in before voting.
 
@@ -729,40 +784,66 @@ A video's summary and quiz. Public like the feed, so guests get them too.
 | Method | Path                              | Body | Success response |
 |--------|-----------------------------------|------|------------------|
 | GET    | `/api/videos/{youtubeId}/study`   | none | `200 { status, summary?, questions? }`. `400` for an invalid id, `404` if the video isn't in our database |
+| POST   | `/api/videos/{youtubeId}/study/answers` | `{ question, choice }` | `200 { correct, answerIndex, explanation, signedIn, counted, pointsEarned, streak }`. `400` for a bad id, a question or option that doesn't exist, or anything but whole numbers; `404` if the video has no quiz; `429` past 30 answers a minute per account or 120 per IP |
+| GET    | `/api/leaderboard`                | none | `200 { weekStart, week: { top, you }, allTime: { top, you } }`. `top` is up to 20 `{ rank, username, points, correct, streak }`; `you` is the caller's own row (`rank` null with no points), null for guests. `429` past 30 a minute per IP |
 
 `status` is one of:
 
-- `ready`: `summary` (a string) and `questions` (1-3 of `{ question, options, answerIndex, explanation }`,
-  where `options` has 4 strings and `answerIndex` is 0-3) are included.
+- `ready`: `summary` (a string) and `questions` (1-3 of `{ question, options }`, where `options`
+  has 4 strings) are included. The right answer and explanation only come back from `answers`.
 - `pending`: it's being written. The first request for a video starts this. Ask again in a few seconds.
 - `busy`: 20 videos are already waiting. Ask again in a minute.
 - `unavailable`: Ollama is off or down, the daily limit is used up, or the model failed on this
   video recently.
 
-All of it was written by the LLM, so the frontend shows it as plain text only. The answer is in the
-response because nothing is scored yet; when progress tracking adds scores, checking answers has to
-move to the backend (see SECURITY.md).
+All of it was written by the LLM, so the frontend shows it as plain text only.
+
+### How scoring works
+
+- Answers are checked in the backend against the saved quiz (`StudyController`), never in the
+  browser, so the answer key isn't in the page before you answer.
+- Only your **first** answer to each question counts. A right first answer is worth 10 points
+  (`QuizAttemptRepository.POINTS_PER_CORRECT_ANSWER`); a wrong one is worth 0 and can't be fixed by
+  retaking. Retakes still say whether you were right. A unique constraint in `quiz_attempts`
+  (V14) enforces this, even for answers sent at the same moment.
+- Guests can check answers but earn nothing and nothing is saved.
+- **Streak:** days in a row (UTC) with at least one right first answer. Answering again the same
+  day keeps it, the next day adds one, and missing a day starts it over. The board shows 0 once a
+  day has been missed.
+- **This week** is from Monday 00:00 UTC; **all time** is everything.
+- **Ranks** use standard competition ranking: equal points share a rank and the next one skips
+  (1, 2, 2, 4), listed by username within a tie. Only people with points are ranked, and banned
+  users are left out.
+- **Banned videos:** banning a video deletes its quiz, but the points people already earned on it
+  stay (they answered in good faith). Their answers are detached from the video, so if it's ever
+  unbanned and gets a new quiz, those new questions can be answered again.
+- The board shows usernames only, never emails, ids or IPs. Deleting an account deletes its scores.
 
 ## Topic finder API
 
-The AI topic finder on the interests page. Both endpoints need a login (`401` otherwise).
+The "Type a topic" box on the interests page. Needs a login (`401` otherwise). Nothing here waits
+on the LLM.
 
-| Method | Path                         | Body       | Success response |
-|--------|------------------------------|------------|------------------|
-| POST   | `/api/me/topic-suggestions`  | `{ text }` | `200 { matches, ideas }`. `400` if `text` is empty, has no letters or digits, or is over 200 characters. `429` past 10 requests an hour per account (30 per IP) or when the model is busy for a minute. `503` if Ollama is off or down |
-| POST   | `/api/me/topics`             | `{ key }`  | `201 { topics }` when added, `200 { topics }` if it already existed. `404` for an unknown or expired key. `429` past 10 new topics a day per account or 200 a day overall. `409` if the name was removed by an admin or the catalog is full |
+| Method | Path             | Body                   | Success response |
+|--------|------------------|------------------------|------------------|
+| POST   | `/api/me/topics` | `{ name, asTyped? }`   | `201 { topic, created: true, similar: false }` when it was just added, `200 { topic, created: false, similar }` when we had it. Either way the user now follows it. `400` for a name that breaks the rules below. `409` if the name is blocked (denylist, or removed by an admin or the AI review), the catalog is full, or the user follows 200 topics already. `429` past 60 requests an hour per account (120 per IP), 10 new topics a day per account, or 200 a day overall |
 
-`matches` are topics already in the catalog (`{ id, name, parentId, ai }`). `ideas` are new topics
-the model suggested: `{ key, name, subject, newSubject }`, where `newSubject` means the subject is
-new too and gets added with it. To add one, send its `key` back. `topics` is what to pick: the new
-subject first (when one was made), then the topic.
+`topic` is `{ id, name, parentId, ai }`. How a name is looked up (`TopicMatcher`): the same name
+ignoring case, spacing and punctuation ("Pre Algebra" is Pre-Algebra), then singular or plural
+("black hole"), then a small typo (an edit distance of 1 for 5-8 characters, 2 from 9 on, none for
+4 or fewer; the first letter and any digits must match, so "Algebra 3" is never Algebra 2). A typo
+match comes back with `similar: true`; send the same name with `asTyped: true` to skip typo
+matching and add it as typed. A new topic goes under a quick guess at its subject
+(`SubjectGuesser`), or under **Explore** (seeded in V15). Its videos are fetched right away (see
+"Getting a YouTube API key"), and it's queued for the AI review, which may move it, give it a better
+YouTube search, or remove it and block its name.
 
-Keys are random, belong to the account that asked, can be used once, and expire after 30
-minutes; asking again replaces them. That way the only topic names that can ever be added are ones
-the model suggested and the backend checked; a client can't send a name of its own. Names are 1-40
-characters (subjects 1-30) of letters, digits, spaces and `& ' . , + # ( ) / : -`, start with a
-letter or digit, and are unique ignoring case. There can be at most 40 subjects and 2,000 topics.
-AI-added topics nobody has picked aren't refreshed from YouTube, so they can't use up the quota.
+Names are cleaned (Unicode NFKC, invisible characters removed, spaces collapsed, lowercase words
+title-cased, so "black holes" becomes "Black Holes" and "AP biology" becomes "AP Biology") and
+must then be 1-3 words and 2-40 characters of letters, digits, spaces and `& + ' - . #`, start
+with a letter or digit, and have at least one letter. They're unique ignoring case. There can be
+at most 40 subjects and 2,000 topics. Topics users added that nobody follows aren't refreshed from
+YouTube, so they can't use up the quota.
 
 ## Admin API
 
@@ -778,7 +859,8 @@ Every `/api/admin/` endpoint answers `401` if not logged in and `403` if the use
 | GET    | `/api/admin/banned-videos`              | none              | `200 { videos }`, newest ban first                                   |
 | PUT    | `/api/admin/banned-videos/{youtubeId}`  | `{ reason }`      | `204`; removes it from the feed and everyone's liked lists for good  |
 | DELETE | `/api/admin/banned-videos/{youtubeId}`  | none              | `204`; it comes back the next time its topic is refreshed            |
-| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans, unbans and topic removals, with the admin's IP |
+| GET    | `/api/admin/actions`                    | none              | `200 { actions }`, the 50 most recent bans, unbans and topic removals, with the admin's IP. Removals by the AI review have no admin or IP |
+| GET    | `/api/admin/actions/export`             | none              | `200` CSV file download (`brainfeed-audit-log-YYYY-MM-DD.csv`) of up to 10,000 actions, newest first. Built in a temp file first (`export/ExportController`), cells starting with `= + - @` are prefixed with `'` so Excel won't run them |
 | GET    | `/api/admin/topics`                     | none              | `200 { topics }`, AI-added topics, newest first: `{ id, name, subject, addedBy, createdAt, picks }` |
 | DELETE | `/api/admin/topics/{id}`                | `{ reason }`      | `204`; removes an AI-added topic (a subject takes its topics with it), its videos, and blocks the name. `404` for seeded topics |
 
@@ -816,12 +898,12 @@ This is a class project, so scope is going to move around as we go. Rough direct
 2. **Done:** subjects and sub-subjects (Math → Algebra 2) covering the major areas of learning
 3. **Done:** saved thumbs up/down. **Next:** use them in the feed (hide disliked videos, show less from disliked channels)
 4. **Done:** the first Duolingo piece: an LLM summary and quiz questions for each video, from a free
-   model running locally in Ollama. **Next:** progress tracking (saving answers, streaks, reviewing
-   missed questions)
+   model running locally in Ollama. **Done:** scoring (first answers saved and checked on the
+   server, points, daily streaks) and the leaderboard. **Next:** reviewing missed questions
 5. **Later:** web scraping for learning material beyond YouTube (sources to be decided)
-6. **Done (first version):** the AI topic finder. Users describe what they want to learn, and the
-   LLM finds matching topics or suggests new subjects and sub-subjects, so any subject can be
-   covered. The list in `V4__subjects_and_subtopics.sql` is now the starting catalog. **Maybe
+6. **Done:** add any topic. Users type a topic and get it in about a second; the LLM then
+   reviews it in the background (better subject and search, harmful ones removed), so any subject
+   can be covered. The list in `V4__subjects_and_subtopics.sql` is now the starting catalog. **Maybe
    next:** deeper levels (Math → Algebra 2 → Quadratics), which would need a recursive feed query
 7. **Maybe:** TikTok/Instagram as additional content sources, if time allows
 
@@ -837,9 +919,12 @@ scroll one video at a time.
 
 Signed-in users can like and dislike videos, save them to playlists and a study notebook, and see
 their watch history. Each video's "Video Summary" box has a short summary and a 2-question quiz,
-written by a free model running in Ollama the first time someone asks for it. Quiz answers aren't
-saved yet; that's the progress-tracking step on the roadmap. Signed-in users can also find topics
-with AI on the interests page and add new ones to the shared catalog; admins can remove them.
+written by a free model running in Ollama the first time someone asks for it. Answers are checked
+on the server; signed-in users earn points and a daily streak and show up on the leaderboard. Signed-in users can also type any
+topic on the interests page and get it in about a second, new ones included; an AI reviews new
+topics afterwards and admins can remove them.
 
 Backend tests cover the logic, every repository's SQL against a real Postgres, and the auth, watch
-history and security setup over real HTTP.
+history and security setup over real HTTP. Frontend tests cover every page, component and API
+module, including what the user sees while things load, when lists are empty and when a request
+fails (each failed call shows a readable message instead of breaking the page).

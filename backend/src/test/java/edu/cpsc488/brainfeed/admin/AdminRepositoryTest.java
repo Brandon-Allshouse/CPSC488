@@ -84,6 +84,49 @@ class AdminRepositoryTest {
     }
 
     @Test
+    void unknownUsersArentFoundOrBanned() {
+        assertTrue(admins.findUser(999_999).isEmpty());
+        assertFalse(admins.banUser(admin, null, 999_999, "spam"));
+        assertEquals(0, TestDatabase.number("SELECT count(*) FROM admin_actions"));
+    }
+
+    @Test
+    void videoSearchMatchesTitleChannelOrId() {
+        TestDatabase.addVideo("video000001", math);
+        TestDatabase.addVideo("video000002", math);
+        assertEquals(1, admins.searchVideos(AdminController.likePattern("video000002"), 50).size());
+        assertEquals(2, admins.searchVideos(AdminController.likePattern("test channel"), 50).size());
+        assertEquals("Math", admins.searchVideos(AdminController.likePattern("Video video000001"), 50).get(0).topic());
+        assertTrue(admins.searchVideos(AdminController.likePattern("no such video"), 50).isEmpty());
+    }
+
+    @Test
+    void aVideoWeHaventFetchedCanStillBeBanned() {
+        // so an admin can block a known bad video before a refresh ever brings it in
+        admins.banVideo(admin, null, "video000009", "spam");
+        AdminRepository.BannedVideo banned = admins.bannedVideos(10).get(0);
+        assertEquals("video000009", banned.youtubeId());
+        assertNull(banned.title());
+        assertEquals("testadmin", banned.bannedBy());
+    }
+
+    @Test
+    void banningTheSameVideoAgainJustUpdatesTheReason() {
+        admins.banVideo(admin, null, "video000001", "spam");
+        admins.banVideo(admin, null, "video000001", "off-topic");
+        assertEquals(1, TestDatabase.number("SELECT count(*) FROM banned_videos"));
+        assertEquals("off-topic", admins.bannedVideos(10).get(0).reason());
+        // both bans are in the log
+        assertEquals(2, TestDatabase.number("SELECT count(*) FROM admin_actions WHERE action = 'ban_video'"));
+    }
+
+    @Test
+    void anAdminsIpIsStoredOnlyWhenItsReal() {
+        admins.banVideo(admin, "not an ip", "video000001", "spam");
+        assertNull(TestDatabase.text("SELECT host(ip) FROM admin_actions"));
+    }
+
+    @Test
     void statsCountEverything() {
         TestDatabase.addVideo("video000001", math);
         admins.banUser(admin, null, user, "spam");
@@ -133,5 +176,20 @@ class AdminRepositoryTest {
         assertFalse(admins.removeAiTopic(admin, null, math, "nope"));
         assertEquals(1, TestDatabase.number("SELECT count(*) FROM topics WHERE id = ?", math));
         assertTrue(admins.recentActions(10).isEmpty());
+    }
+
+    @Test
+    void removalsByTheAiReviewSayAiReviewInTheLog() {
+        // TopicReviewer logs with no admin and no IP
+        TestDatabase.exec("INSERT INTO admin_actions (admin_id, ip, action, target, reason) "
+                + "VALUES (NULL, NULL, 'remove_topic', 'Bad Topic (#99)', 'Removed automatically')");
+        assertEquals(AdminRepository.AI_REVIEW, admins.recentActions(10).get(0).admin());
+    }
+
+    @Test
+    void actionsByADeletedAdminStillShowNoName() {
+        TestDatabase.exec("INSERT INTO admin_actions (admin_id, ip, action, target, reason) "
+                + "VALUES (NULL, CAST('192.0.2.1' AS inet), 'remove_topic', 'Comets (#5)', 'spam')");
+        assertNull(admins.recentActions(10).get(0).admin());
     }
 }

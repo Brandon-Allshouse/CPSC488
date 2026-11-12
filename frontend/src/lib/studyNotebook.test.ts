@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildStudyNotesText, filterStudyVideos, type StudyNotes } from './studyNotebook';
+import { buildStudyNotesText, filterStudyVideos, hasStudyNote, type StudyNotes } from './studyNotebook';
 
 const videos = [
   { youtubeId: 'video000001', title: 'TCP handshake', creator: 'Network lessons' },
@@ -34,5 +34,22 @@ describe('study notebook search and export', () => {
     const extra: StudyNotes = { ...notes, video000002: { youtubeId: 'video000002', note: '   ', updatedAt: '' }, oldVideo: { youtubeId: 'oldVideo', note: 'Removed entry', updatedAt: '' } };
     expect(buildStudyNotesText(videos, extra)).not.toContain('Removed entry');
     expect(buildStudyNotesText(videos, extra)).not.toContain('Matrix multiplication');
+  });
+
+  it('does not count a note that is only spaces or missing', () => {
+    expect(hasStudyNote('  \n ')).toBe(false);
+    expect(hasStudyNote(undefined)).toBe(false);
+    expect(hasStudyNote(' SYN ')).toBe(true);
+  });
+
+  it('ignores case and extra spaces in the search', () => {
+    expect(filterStudyVideos(videos, notes, '  syn/ack ', 'all').map((video) => video.youtubeId)).toEqual(['video000001']);
+    expect(filterStudyVideos(videos, notes, 'MATRIX', 'all').map((video) => video.youtubeId)).toEqual(['video000002']);
+  });
+
+  it('keeps the video id from breaking out of the link in the export', () => {
+    const odd = [{ youtubeId: 'a b&c', title: 'Odd', creator: 'testuser' }];
+    const text = buildStudyNotesText(odd, { 'a b&c': { youtubeId: 'a b&c', note: 'note', updatedAt: '2026-10-22T00:00:00Z' } });
+    expect(text).toContain('https://www.youtube.com/watch?v=a%20b%26c');
   });
 });

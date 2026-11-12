@@ -17,6 +17,7 @@ export interface WatchHistory {
   limit: number;
 }
 
+/** The signed-in user's history, newest first. */
 export async function fetchWatchHistory(): Promise<WatchHistory> {
   return request<WatchHistory>('/api/me/watch-history');
 }
@@ -26,10 +27,12 @@ export async function recordWatch(youtubeId: string): Promise<void> {
   await request<void>(`/api/me/watch-history/${encodeURIComponent(youtubeId)}`, { method: 'PUT' });
 }
 
+/** Takes one video out of the history. */
 export async function removeFromWatchHistory(youtubeId: string): Promise<void> {
   await request<void>(`/api/me/watch-history/${encodeURIComponent(youtubeId)}`, { method: 'DELETE' });
 }
 
+/** Deletes the whole history. */
 export async function clearWatchHistory(): Promise<void> {
   await request<void>('/api/me/watch-history', { method: 'DELETE' });
 }

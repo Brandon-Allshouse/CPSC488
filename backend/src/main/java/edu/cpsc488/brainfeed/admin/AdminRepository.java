@@ -31,6 +31,7 @@ public class AdminRepository {
                             OffsetDateTime lastLoginAt) {
     }
 
+    /** A video in the feed, as the admin video search shows it. */
     public record AdminVideo(String youtubeId, String title, String channelTitle, String topic) {
     }
 
@@ -48,6 +49,7 @@ public class AdminRepository {
             id, username, email, created_at, is_admin, banned_at, ban_reason,
             host(signup_ip) AS signup_ip, host(last_login_ip) AS last_login_ip, last_login_at""";
 
+    /** The counts on the admin overview. */
     public record Stats(long users, long bannedUsers, long admins, long videos, long bannedVideos) {
     }
 
@@ -57,6 +59,7 @@ public class AdminRepository {
         this.dataSource = dataSource;
     }
 
+    /** User and video counts for the admin overview, in one query. */
     public Stats stats() {
         String sql = """
                 SELECT (SELECT count(*) FROM users) AS users,
@@ -91,6 +94,7 @@ public class AdminRepository {
         }, AdminRepository::mapUser);
     }
 
+    /** One user, banned or not, or empty if there's no such id. */
     public Optional<AdminUser> findUser(long id) {
         String sql = "SELECT " + USER_COLUMNS + " FROM users WHERE id = ?";
         return query(sql, ps -> ps.setLong(1, id), AdminRepository::mapUser).stream().findFirst();
@@ -151,6 +155,7 @@ public class AdminRepository {
                 rs.getString("channel_title"), rs.getString("topic")));
     }
 
+    /** The video blacklist, newest ban first. */
     public List<BannedVideo> bannedVideos(int limit) {
         String sql = """
                 SELECT b.youtube_id, b.title, b.reason, u.username AS banned_by, b.banned_at
@@ -257,13 +262,21 @@ public class AdminRepository {
         });
     }
 
+    /** Shown as the admin for removals made by the background AI review (topics/TopicReviewer). */
+    public static final String AI_REVIEW = "AI review";
+
+    // The AI review logs its removals with no admin and no IP. A real admin always has an id
+    // (until their account is deleted) and a request IP, so this tells the two apart.
+    private static final String ADMIN_LABEL = "CASE WHEN a.admin_id IS NULL AND a.ip IS NULL AND a.action = 'remove_topic'"
+            + " THEN '" + AI_REVIEW + "' ELSE u.username END";
+
     public List<AdminAction> recentActions(int limit) {
         String sql = """
-                SELECT a.id, u.username AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at
+                SELECT a.id, %s AS admin, a.action, a.target, a.reason, host(a.ip) AS ip, a.created_at
                 FROM admin_actions a LEFT JOIN users u ON u.id = a.admin_id
                 ORDER BY a.created_at DESC, a.id DESC
                 LIMIT ?
-                """;
+                """.formatted(ADMIN_LABEL);
         return query(sql, ps -> ps.setInt(1, limit), rs -> new AdminAction(rs.getLong("id"),
                 rs.getString("admin"), rs.getString("action"), rs.getString("target"),
                 rs.getString("reason"), rs.getString("ip"), rs.getObject("created_at", OffsetDateTime.class)));

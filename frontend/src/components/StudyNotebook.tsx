@@ -19,6 +19,11 @@ interface Props {
   onDirtyChange: (dirty: boolean) => void;
 }
 
+/**
+ * The Study notebook on "Your videos": search and filter the notebook videos, write a private
+ * note for each, and download the saved notes as a text file. Tells the parent about unsaved edits
+ * (onDirtyChange) so leaving the page can ask first.
+ */
 export default function StudyNotebook({ videos, removing, onOpenVideo, onRemoveVideo, onSessionExpired, onDirtyChange }: Props) {
   const [notes, setNotes] = useState<StudyNotes>({});
   const [loading, setLoading] = useState(true);

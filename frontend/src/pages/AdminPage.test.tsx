@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   banUser,
   banVideo,
+  downloadAuditLog,
   fetchAdminActions,
   fetchAdminStats,
   fetchAiTopics,
@@ -27,6 +28,7 @@ vi.mock('../api/admin', () => ({
   searchVideos: vi.fn(),
   fetchBannedVideos: vi.fn(),
   banVideo: vi.fn(),
+  downloadAuditLog: vi.fn(),
   unbanVideo: vi.fn(),
   fetchAdminActions: vi.fn(),
   fetchAiTopics: vi.fn(),
@@ -342,5 +344,22 @@ describe('AdminPage', () => {
     const { container } = renderPage();
     expect(await screen.findByText('<b>bold</b>')).toBeTruthy();
     expect(container.querySelector('b')).toBeNull();
+  });
+
+  it('downloads the full audit log as CSV and says so', async () => {
+    vi.mocked(downloadAuditLog).mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Download full log (CSV)' }));
+    expect(await screen.findByText('Downloaded the audit log as a CSV file.')).toBeTruthy();
+    expect(downloadAuditLog).toHaveBeenCalledOnce();
+  });
+
+  it('shows the error when the audit log download fails', async () => {
+    vi.mocked(downloadAuditLog).mockRejectedValue(new ApiError(500, "Couldn't build the export file. Try again."));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Download full log (CSV)' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't build the export file");
+    // the button works again so the admin can retry
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Download full log (CSV)' }).disabled).toBe(false);
   });
 });

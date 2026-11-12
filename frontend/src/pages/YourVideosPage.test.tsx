@@ -126,6 +126,24 @@ describe('YourVideosPage', () => {
     await vi.waitFor(() => expect(handlers.onRemoveFromPlaylist).toHaveBeenCalledWith(1, 'video000003'));
   });
 
+  it('shows the error when removing a video from a playlist fails', async () => {
+    handlers.onRemoveFromPlaylist.mockRejectedValueOnce(new ApiError(0, "Couldn't reach BrainFeed. Check your connection and try again."));
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Saved title from Watch later' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't reach BrainFeed");
+    expect(screen.getByText('Saved title')).toBeTruthy();
+  });
+
+  it('shows the error when deleting a playlist fails', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    handlers.onDeletePlaylist.mockRejectedValueOnce(new ApiError(404, "That playlist doesn't exist."));
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete playlist Exam prep' }));
+    expect((await screen.findByRole('alert')).textContent).toContain("That playlist doesn't exist.");
+  });
+
   it('deletes a playlist after asking, but never Watch later', async () => {
     vi.mocked(fetchMyVideoFeedback).mockResolvedValue({ likedVideos: [], dislikedVideos: [] });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -393,4 +411,30 @@ describe('YourVideosPage', () => {
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Personal study notes' }).value).toBe('Finish these notes later.');
   });
 
+  it('scrolls to the Study notebook when opened from a notebook link', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<YourVideosPage user={testUser} {...handlers} playlists={testPlaylists} focusNotebook />);
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
+    expect(document.activeElement?.id).toBe('study-notebook-title');
+  });
+
+  it('jumps back to the Saved tab and the notebook when the notebook link is used on this page', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    render(<YourVideosPage user={testUser} {...handlers} onShowNotebook={vi.fn()} playlists={testPlaylists} />);
+    openTab(/Liked/);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Study notebook' }));
+    await waitFor(() => expect(scrolled).toHaveBeenCalled());
+    expect(screen.getByRole('tab', { name: /Saved/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('does not scroll anywhere on a normal visit', async () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    renderPage();
+    expect(await screen.findByRole('region', { name: 'Study notebook' })).toBeTruthy();
+    expect(scrolled).not.toHaveBeenCalled();
+  });
 });

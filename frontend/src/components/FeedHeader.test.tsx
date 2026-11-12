@@ -136,4 +136,17 @@ describe('FeedHeader', () => {
     expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull();
   });
 
+  it('has a Study notebook item that opens the notebook', () => {
+    const onShowNotebook = vi.fn();
+    render(<FeedHeader user={testUser} {...handlers} onShowNotebook={onShowNotebook} />);
+    fireEvent.click(screen.getByText('Profile'));
+    fireEvent.click(screen.getByRole('button', { name: 'Study notebook' }));
+    expect(onShowNotebook).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves out the Study notebook item when the page has no way to open it', () => {
+    render(<FeedHeader user={testUser} {...handlers} />);
+    fireEvent.click(screen.getByText('Profile'));
+    expect(screen.queryByRole('button', { name: 'Study notebook' })).toBeNull();
+  });
 });

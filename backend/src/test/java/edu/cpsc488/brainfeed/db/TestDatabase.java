@@ -25,7 +25,10 @@ import java.sql.Statement;
  */
 public final class TestDatabase {
 
-    private static final String NAME = "brainfeed_test";
+    // TEST_DB_NAME lets two test runs share one Postgres without dropping each other's database
+    // (e.g. two people, or two branches, testing at once). Letters, digits and _ only, since it
+    // goes into a DROP DATABASE statement.
+    private static final String NAME = testDatabaseName(System.getenv("TEST_DB_NAME"));
     // A made-up hash in the right format, so the users table's CHECK accepts it.
     public static final String FAKE_HASH = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHRzb21lc2FsdA$"
             + "aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g";
@@ -33,6 +36,16 @@ public final class TestDatabase {
     private static HikariDataSource dataSource;
 
     private TestDatabase() {
+    }
+
+    static String testDatabaseName(String fromEnv) {
+        if (fromEnv == null || fromEnv.isBlank()) {
+            return "brainfeed_test";
+        }
+        if (!fromEnv.matches("brainfeed_test[a-z0-9_]{0,30}")) {
+            throw new IllegalStateException("TEST_DB_NAME must start with brainfeed_test and use only a-z, 0-9 and _.");
+        }
+        return fromEnv;
     }
 
     /** The test database, created and migrated the first time. Skips the test if none is set up. */

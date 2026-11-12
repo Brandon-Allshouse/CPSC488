@@ -9,7 +9,7 @@ export interface Topic {
   id: number;
   name: string;
   parentId: number | null;
-  /** true if a user added it with the AI topic finder. The name came from the LLM: plain text only. */
+  /** true if a user added it with the topic finder. The name was typed by a user: plain text only. */
   ai?: boolean;
 }
 
@@ -51,6 +51,7 @@ export interface MyVideoFeedback {
   dislikedVideos: SavedVideo[];
 }
 
+/** Every subject and sub-subject. Public, so guests can use it too. */
 export async function fetchTopics(): Promise<Topic[]> {
   const { topics } = await request<{ topics: Topic[] }>('/api/topics');
   return topics;
@@ -62,6 +63,7 @@ export async function fetchMyInterests(): Promise<number[]> {
   return topicIds;
 }
 
+/** Replaces the logged-in user's interests and returns what was saved. */
 export async function saveMyInterests(topicIds: number[]): Promise<number[]> {
   const res = await request<{ topicIds: number[] }>('/api/me/interests', {
     method: 'PUT',

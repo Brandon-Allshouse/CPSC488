@@ -30,6 +30,7 @@ public class WatchHistoryController {
         this.auth = auth;
     }
 
+    /** Adds the /api/me/watch-history routes. */
     public void register(RoutesConfig routes) {
         routes.get("/api/me/watch-history", this::handleList);
         routes.put("/api/me/watch-history/{youtubeId}", this::handleRecord);

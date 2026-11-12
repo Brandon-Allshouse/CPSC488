@@ -143,7 +143,7 @@ export default function SaveMenu({ youtubeId, idPrefix, notebook, playlists, onT
                 <span>Study notebook</span>
               </label>
               <p id={notebookHintId} className="px-1 pt-1 text-xs leading-relaxed text-muted-foreground">
-                Your personal study collection in Your videos, under the Saved tab.
+                Your personal study notes. Open them from Study notebook in the Profile menu or sidebar.
               </p>
             </div>
           )}

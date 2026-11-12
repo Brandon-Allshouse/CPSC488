@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -307,6 +308,26 @@ class FeedRefresherTest {
 
         youtube.crash = false;
         assertTrue(refresher.fetchMissing(List.of(29)));
+        runWaitingWork();
+        assertEquals(List.of(29), topics.marked);
+    }
+
+    @Test
+    void aShutDownWorkerDoesNotLeaveTopicsStuckAsFetching() {
+        topics.missing = new ArrayList<>(List.of(topic(29, "statistics explained")));
+        boolean[] shutDown = {true};
+        FeedRefresher stopping = new FeedRefresher(topics, videos, youtube, job -> {
+            if (shutDown[0]) {
+                throw new RejectedExecutionException("shut down");
+            }
+            waiting.add(job);
+        }, clock);
+
+        // nothing is being fetched, so the feed shouldn't say "finding videos"
+        assertFalse(stopping.fetchMissing(List.of(29)));
+        // and the topic wasn't left marked as queued, so it can be tried again
+        shutDown[0] = false;
+        assertTrue(stopping.fetchMissing(List.of(29)));
         runWaitingWork();
         assertEquals(List.of(29), topics.marked);
     }

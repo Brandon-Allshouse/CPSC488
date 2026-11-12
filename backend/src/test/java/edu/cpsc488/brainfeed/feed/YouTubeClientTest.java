@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Tests reading YouTube's responses. Nothing here calls the real YouTube API.
@@ -139,6 +141,41 @@ class YouTubeClientTest {
         String longText = "a".repeat(YouTubeClient.MAX_DESCRIPTION + 100);
         JsonNode body = MAPPER.readTree("{\"items\": [{\"snippet\": {\"description\": \"" + longText + "\"}}]}");
         assertEquals(YouTubeClient.MAX_DESCRIPTION, YouTubeClient.parseDescription(body).orElseThrow().length());
+    }
+
+    @Test
+    void cuttingNeverSplitsAnEmoji() {
+        // the emoji is two Java chars; half of one would be a broken character in the database
+        assertEquals("ab", YouTubeClient.cut("ab😀", 3));
+        assertEquals("ab😀", YouTubeClient.cut("ab😀cd", 4));
+        assertEquals("abc", YouTubeClient.cut("abc", 3));
+    }
+
+    @Test
+    void aNormalReplyIsRead() throws Exception {
+        assertTrue(YouTubeClient.readBody(200, "{\"items\": []}").has("items"));
+    }
+
+    @Test
+    void anErrorStatusBecomesAnIOExceptionWithTheReason() {
+        IOException e = assertThrows(IOException.class, () -> YouTubeClient.readBody(403,
+                "{\"error\": {\"errors\": [{\"reason\": \"quotaExceeded\"}]}}"));
+        assertEquals("YouTube returned HTTP 403 (quotaExceeded)", e.getMessage());
+    }
+
+    @Test
+    void aReplyThatIsntJsonDoesntEndUpInTheLog() {
+        // e.g. a proxy's HTML error page; the parser's own message would quote part of it
+        IOException e = assertThrows(IOException.class, () -> YouTubeClient.readBody(502,
+                "<html><body>Bad gateway secret-page-text</body></html>"));
+        assertEquals("YouTube sent back something that isn't JSON (HTTP 502)", e.getMessage());
+        assertFalse(e.getMessage().contains("secret-page-text"));
+    }
+
+    @Test
+    void anEmptyReplyIsAnError() {
+        assertThrows(IOException.class, () -> YouTubeClient.readBody(200, ""));
+        assertThrows(IOException.class, () -> YouTubeClient.readBody(200, null));
     }
 
     @Test

@@ -143,4 +143,29 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue as guest' }));
     expect(onGuest).toHaveBeenCalled();
   });
+
+  it('shows Please wait and blocks a second click while logging in', async () => {
+    let finish: (user: typeof testUser) => void = () => {};
+    vi.mocked(login).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    type('Email', 'test@sru.edu');
+    type('Password', 'correct horse battery staple');
+    submit('Log in');
+
+    const button = (await screen.findByRole('button', { name: 'Please wait…' })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    finish(testUser);
+    await vi.waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith(testUser));
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a readable message when the server cannot be reached', async () => {
+    vi.mocked(login).mockRejectedValue(new ApiError(0, "Couldn't reach BrainFeed. Check your connection and try again."));
+    type('Email', 'test@sru.edu');
+    type('Password', 'correct horse battery staple');
+    submit('Log in');
+
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't reach BrainFeed. Check your connection and try again.");
+    // the form can be sent again once the error shows
+    expect(screen.getByRole('button', { name: 'Log in' })).toBeTruthy();
+  });
 });

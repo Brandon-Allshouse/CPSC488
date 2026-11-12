@@ -76,4 +76,11 @@ describe('FeedSidebar', () => {
     render(<FeedSidebar user={null} topicNames={[]} {...handlers} activity={{ watchedToday: '0', saved: 0, liked: 0 }} />);
     expect(screen.queryByRole('region', { name: 'Your progress' })).toBeNull();
   });
+
+  it('links straight to the Study notebook', () => {
+    const onShowNotebook = vi.fn();
+    render(<FeedSidebar user={testUser} topicNames={[]} {...handlers} onShowNotebook={onShowNotebook} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Study notebook' }));
+    expect(onShowNotebook).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,7 +1,7 @@
 // Typed wrappers around the backend's /api/admin endpoints (see the README's "Admin API" table).
 // Every one of them returns 403 unless the logged-in user is an admin.
 
-import { request } from './client';
+import { ApiError, OFFLINE_MESSAGE, request } from './client';
 
 export interface AdminStats {
   users: number;
@@ -127,6 +127,36 @@ export async function fetchAdminActions(): Promise<AdminAction[]> {
 export async function fetchSecurityLog(limit = 100): Promise<SecurityEvent[]> {
   const { events } = await request<{ events: SecurityEvent[] }>(`/api/admin/security-log?limit=${limit}`);
   return events;
+}
+
+// Only names the backend builds (AuditLogExport.fileName) are used; anything else falls back.
+const SAFE_FILE_NAME = /filename="([A-Za-z0-9._-]{1,100})"/;
+
+/**
+ * Downloads the whole admin audit log as a CSV file. This can't use request() because the answer
+ * is a file, not JSON, but errors come back as the usual {"error": "..."} and become an ApiError.
+ */
+export async function downloadAuditLog(): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch('/api/admin/actions/export', { headers: { Accept: 'text/csv' }, credentials: 'same-origin' });
+  } catch {
+    throw new ApiError(0, OFFLINE_MESSAGE);
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    const message = data && typeof data.error === 'string' && data.error.length <= 300 ? data.error : `Download failed (${res.status})`;
+    throw new ApiError(res.status, message);
+  }
+  const fileName = SAFE_FILE_NAME.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'brainfeed-audit-log.csv';
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export async function fetchAiTopics(): Promise<AiTopic[]> {

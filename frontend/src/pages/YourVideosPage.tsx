@@ -18,6 +18,8 @@ import { cn } from '@/lib/utils';
 type Tab = 'saved' | 'liked' | 'disliked';
 
 interface Props extends PageNavigation {
+  /** Opened from a "Study notebook" link: scroll to the notebook once it has loaded. */
+  focusNotebook?: boolean;
   /** Goes back to the feed and shows this video there. */
   onOpenVideo: (video: SavedVideo) => void;
   /** Removes a notebook entry and updates the feed's saved indicator. */
@@ -41,6 +43,7 @@ export default function YourVideosPage({
   onCreatePlaylist,
   onDeletePlaylist,
   onRemoveFromPlaylist,
+  focusNotebook = false,
   ...navigation
 }: Props) {
   const { user, onLogout } = navigation;
@@ -81,6 +84,22 @@ export default function YourVideosPage({
       });
     return () => { cancelled = true; };
   }, [user]);
+
+  function scrollToNotebook() {
+    setTab('saved');
+    // After React shows the Saved tab. Focus moves too, so keyboard and screen reader users land there.
+    requestAnimationFrame(() => {
+      const heading = document.getElementById('study-notebook-title');
+      heading?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      heading?.focus({ preventScroll: true });
+    });
+  }
+
+  // Waits for the notebook to load (or fail), so the scroll lands on the final layout.
+  const notebookSettled = !user || notebookVideos !== null || notebookLoadError !== null;
+  useEffect(() => {
+    if (focusNotebook && notebookSettled) scrollToNotebook();
+  }, [focusNotebook, notebookSettled]);
 
   async function removeNotebookEntry(youtubeId: string) {
     if (notebookPending.current) return;
@@ -227,7 +246,7 @@ export default function YourVideosPage({
         <CardHeader className="flex-row items-center gap-2">
           {icon}
           {/* Playlist names are typed by the user: plain JSX text only. */}
-          <h2 id={id} className="truncate text-lg">
+          <h2 id={id} tabIndex={-1} className="truncate text-lg outline-none">
             {title}
           </h2>
           {count !== undefined && <Badge variant="secondary" className="ml-auto">{count}</Badge>}
@@ -267,6 +286,8 @@ export default function YourVideosPage({
     onBack: () => leaveNotebook(navigation.onBack),
     onEditInterests: () => leaveNotebook(navigation.onEditInterests),
     onShowLikedVideos: () => leaveNotebook(navigation.onShowLikedVideos),
+    // Already on this page, so just jump to the notebook instead of reloading.
+    onShowNotebook: navigation.onShowNotebook ? scrollToNotebook : undefined,
     onShowLeaderboard: () => leaveNotebook(navigation.onShowLeaderboard),
     onShowHistory: navigation.onShowHistory ? () => leaveNotebook(navigation.onShowHistory!) : undefined,
     onShowAdmin: navigation.onShowAdmin ? () => leaveNotebook(navigation.onShowAdmin!) : undefined,

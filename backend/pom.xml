@@ -12,6 +12,9 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Where Maven builds to. Override with -Dbrainfeed.buildDir=target-x so two test runs at once
+             don't overwrite each other's compiled classes. -->
+        <brainfeed.buildDir>${project.basedir}/target</brainfeed.buildDir>
         <javalin.version>7.2.3</javalin.version>
         <jackson.version>2.22.3</jackson.version>
         <flyway.version>13.8.0</flyway.version>
@@ -81,6 +84,7 @@
     </dependencies>
 
     <build>
+        <directory>${brainfeed.buildDir}</directory>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

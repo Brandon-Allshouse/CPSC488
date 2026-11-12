@@ -14,6 +14,7 @@ public final class Database {
     private Database() {
     }
 
+    /** Opens the connection pool (at most 10 connections). */
     public static HikariDataSource connect(String url, String user, String password) {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(url);
