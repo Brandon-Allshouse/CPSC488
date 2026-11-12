@@ -71,7 +71,7 @@ services:
   # loads it when it starts and when someone opens the feed, so people rarely wait for that.
   # Ollama has no login, so it gets no port: only the backend can reach it.
   ollama:
-    image: ollama/ollama:0.40.11
+    image: ollama/ollama:0.40.15
     environment:
       # Keep the model in memory for 30 minutes after the last summary, then free the RAM. The
       # backend also sends this with every request (OllamaClient.KEEP_ALIVE); this is the fallback.
@@ -93,7 +93,7 @@ services:
   # Downloads the model the first time (about 6.6 GB for gemma4:e4b), then exits. Later runs see
   # it's already there and finish in a second. Summaries say "unavailable" until it's done.
   ollama-pull:
-    image: ollama/ollama:0.40.11
+    image: ollama/ollama:0.40.15
     environment:
       OLLAMA_HOST: http://ollama:11434
     command: ["pull", "${OLLAMA_MODEL:-gemma4:e4b}"]
